@@ -9,6 +9,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/agriev/next-gen-claude-ux/releases/latest">⬇ Download</a> ·
   <a href="docs/demo.mp4">📹 Full demo (3 min, MP4)</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
   <a href="docs/AGENTS.md">Agents</a> ·
@@ -82,21 +83,47 @@ Full keyboard map: click `? shortcuts` bottom-left, or see [docs/SHORTCUTS.md](d
 
 ---
 
-## Run
+## Download
+
+Pre-built installers are published to [GitHub Releases](https://github.com/agriev/next-gen-claude-ux/releases/latest) on every tagged version:
+
+| Platform | Format | Notes |
+| --- | --- | --- |
+| macOS (Apple Silicon) | `.dmg` (`-arm64`) | Primary target. Right-click → Open the first time (no codesigning yet). |
+| macOS (Intel) | `.dmg` (`-x64`) | |
+| Linux | `.AppImage`, `.deb` | x64 + arm64. |
+| Windows | `.exe` (NSIS installer) | x64. |
+
+Auto-updates are enabled in packaged builds — the app checks GitHub Releases at launch and prompts to install on quit. Set `JARVIS_DISABLE_UPDATER=1` to opt out.
+
+Authentication: existing `claude login` session is auto-used (Pro/Max accounts); otherwise set `ANTHROPIC_API_KEY` in your environment before launch.
+
+## Run from source
 
 ```bash
-git clone https://github.com/<you>/interactive-jarvis.git
-cd interactive-jarvis
+git clone https://github.com/agriev/next-gen-claude-ux.git
+cd next-gen-claude-ux
 npm install
 npm run rebuild              # native rebuild for better-sqlite3 against Electron's Node ABI
 JARVIS_SEED_MOCKS=1 npm run dev
 ```
 
-That seeds a 19-card marketing-strategy demo board with edges and a PlantUML funnel diagram, and opens the Electron window. Existing `claude login` session is auto-used; otherwise set `ANTHROPIC_API_KEY`.
+That seeds a 19-card marketing-strategy demo board with edges and a PlantUML funnel diagram, and opens the Electron window.
 
 To start blank, omit `JARVIS_SEED_MOCKS=1`.
 
 For browser-only preview of the renderer (no agents), Vite serves at `http://localhost:5173/` — a mock IPC kicks in and you'll see the seed cards without any backend.
+
+## Build your own installer
+
+```bash
+npm run dist:mac      # Apple Silicon + Intel .dmg + .zip
+npm run dist:linux    # AppImage + deb (x64 + arm64)
+npm run dist:win      # NSIS .exe (x64)
+npm run dist          # current platform, all configured targets
+```
+
+Output lands in `release/`. CI does this for all three platforms on every `v*` tag — see `.github/workflows/release.yml`.
 
 ---
 

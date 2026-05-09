@@ -1,0 +1,107 @@
+name: release
+
+# Cut a release by pushing a tag like `v0.1.0`. The workflow builds installers
+# on macOS / Linux / Windows in parallel, drafts a GitHub Release, uploads all
+# artifacts, and (on success) leaves the release as a draft so a human can
+# write the changelog and publish.
+#
+# Manual run is also supported via `workflow_dispatch` — useful for testing the
+# pipeline without cutting a real version.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
+          - windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      # Linux needs a couple of system libs for electron-builder to assemble
+      # AppImage / deb packages.
+      - name: Install Linux build deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libarchive-tools \
+            rpm \
+            fakeroot \
+            dpkg
+
+      - name: Install npm deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build renderer + main + preload
+        run: npm run build
+        env:
+          ELECTRON_DISABLE_SANDBOX: '1'
+
+      # Package + publish. electron-builder reads `electron-builder.yml`,
+      # rebuilds better-sqlite3 against Electron's Node ABI, and uploads
+      # artifacts to a draft GitHub Release matching the pushed tag.
+      - name: Package (macOS)
+        if: matrix.os == 'macos-latest'
+        run: npx electron-builder --mac --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Codesigning / notarization off by default (no certs in repo).
+          # To enable, populate these as repo secrets:
+          #   CSC_LINK            base64 .p12
+          #   CSC_KEY_PASSWORD    .p12 password
+          #   APPLE_ID            apple ID email
+          #   APPLE_APP_SPECIFIC_PASSWORD  app-specific password
+          #   APPLE_TEAM_ID       team identifier
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Package (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: npx electron-builder --linux --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Belt-and-braces: also upload artifacts to the workflow run so a failed
+      # `--publish always` (e.g. permissions, network) doesn't lose the build.
+      - name: Upload artifacts to workflow
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/*.exe
+            release/latest*.yml
+          if-no-files-found: ignore
+          retention-days: 14

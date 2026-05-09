@@ -5,6 +5,7 @@ import { WorldState } from './world-state';
 import { registerIpc, seedMarketingBoard } from './ipc';
 import { Orchestrator } from './orchestrator';
 import { FsSync } from './fs-sync';
+import { startAutoUpdater } from './auto-updater';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -82,6 +83,16 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       await seedMarketingBoard(world);
     }, 1200);
+  }
+
+  // Check for updates 4s after launch so the network call doesn't compete with
+  // first-paint or agent boot. No-op in dev (`app.isPackaged === false`).
+  if (process.env['JARVIS_DISABLE_UPDATER'] !== '1') {
+    setTimeout(() => {
+      startAutoUpdater({ getWindow: () => mainWindow }).catch((err) => {
+        console.warn('[auto-updater] startup failed', err);
+      });
+    }, 4000);
   }
 });
 

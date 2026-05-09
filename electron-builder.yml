@@ -1,0 +1,108 @@
+appId: com.griev.jarvis
+productName: Interactive Jarvis
+copyright: Copyright © 2026 Anton Griev
+
+# Source layout produced by electron-vite
+directories:
+  buildResources: resources
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.{ts,tsx,map,md}"
+  - "!**/{tsconfig.json,tsconfig.*.json,electron-builder.yml,electron.vite.config.ts}"
+  - "!**/.{git,github,vscode,idea}"
+  - "!**/{test,tests,__tests__,__mocks__,docs,scripts}/**/*"
+
+# better-sqlite3 ships a native .node binary that must live outside the asar.
+asarUnpack:
+  - "node_modules/better-sqlite3/**/*"
+  - "node_modules/bindings/**/*"
+  - "node_modules/file-uri-to-path/**/*"
+
+# Rebuild native modules against Electron's Node ABI during pack.
+npmRebuild: true
+buildDependenciesFromSource: false
+nodeGypRebuild: false
+
+# ---------------- macOS ----------------
+mac:
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+    - target: zip
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  # Codesign / notarize are off by default; CI sets CSC_LINK + APPLE_ID env to enable.
+  identity: null
+  darkModeSupport: true
+  artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+  extendInfo:
+    NSMicrophoneUsageDescription: "Interactive Jarvis listens to your voice for hands-free prompts."
+    NSCameraUsageDescription: "Not used."
+
+dmg:
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ---------------- Linux ----------------
+linux:
+  category: Office
+  synopsis: Spatial multi-agent personal research tool
+  description: >-
+    A 3D canvas where Claude (running locally as a multi-agent system) lays out
+    your research and notes spatially. Cards, edges, clusters, voice, and a
+    scriptable agent toolkit.
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+        - arm64
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+  desktop:
+    entry:
+      Name: Interactive Jarvis
+      Comment: Spatial multi-agent research workspace
+      Categories: Office;Utility;
+
+# ---------------- Windows ----------------
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Interactive Jarvis
+
+# ---------------- Publish ----------------
+# Filled in from GH_TOKEN at release time. The release workflow drafts a release
+# tagged `v${version}` and uploads all matrix artifacts to it.
+publish:
+  - provider: github
+    owner: agriev
+    repo: next-gen-claude-ux
+    releaseType: draft

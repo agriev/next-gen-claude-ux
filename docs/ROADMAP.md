@@ -29,6 +29,10 @@ What's done, what's open. Items marked **★** are high-leverage if you're looki
 - [x] Onboarding tour (3-step), Help Hint panel with full shortcut list.
 - [x] Voice (best-effort): Web Speech via `webkitSpeechRecognition`, PTT (hold Space), continuous toggle, focus-to-card mode (`V`).
 - [x] Marketing-strategy demo seed: 19 cards, 23 edges, 1 PlantUML funnel diagram.
+- [x] CI: GitHub Action runs `npm run typecheck` + `npm run build` on every PR and push to `main`.
+- [x] `electron-builder` packaging for macOS (.dmg + .zip, arm64 + x64), Linux (.AppImage + .deb, arm64 + x64), Windows (.exe NSIS, x64) — `better-sqlite3` rebuilt against Electron's Node ABI and `asarUnpack`-ed so the native `.node` loads at runtime.
+- [x] Release pipeline (`.github/workflows/release.yml`): tag-driven matrix build on macOS / Linux / Windows runners; uploads artifacts to a draft GitHub Release.
+- [x] App-update mechanism via `electron-updater`: packaged builds check the GitHub Releases feed at launch, download in the background, prompt-to-restart on quit. `JARVIS_DISABLE_UPDATER=1` opts out.
 
 ## Open — high-leverage ★
 
@@ -87,12 +91,12 @@ What's done, what's open. Items marked **★** are high-leverage if you're looki
 
 ## Open — boring but important
 
-- [ ] CI: GitHub Action that runs `npm run typecheck` on every PR.
-- [ ] `electron-builder` packaging for macOS (.dmg) / Linux (.AppImage) / Windows (.exe) with native binary handling for `better-sqlite3`.
-- [ ] App-update mechanism (electron-updater).
+- [ ] **Codesigning + notarization for macOS releases.** Pipeline is ready (`CSC_LINK` / `APPLE_ID` env vars are wired in `release.yml`); needs an Apple Developer cert + secrets added to the repo. Until then `.dmg` users get the right-click → Open Gatekeeper bypass on first launch.
 - [ ] `safeStorage` for `ANTHROPIC_API_KEY` so it isn't exposed via env vars.
 - [ ] Settings panel (currently only ModelPicker exposes settings; need a place for fs-sync toggle, theme, agent-pause, etc.).
 - [ ] Crash recovery view on relaunch ("you had 3 unfinished actions; resume? cancel?").
+- [ ] Linux package signing (deb / AppImage zsync for delta updates).
+- [ ] Windows codesigning cert + EV cert for SmartScreen reputation.
 
 ---
 

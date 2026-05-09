@@ -5,8 +5,8 @@ Thanks for looking. This is a personal-tool prototype that grew teeth — it's i
 ## Setup
 
 ```bash
-git clone https://github.com/<you>/interactive-jarvis.git
-cd interactive-jarvis
+git clone https://github.com/agriev/next-gen-claude-ux.git
+cd next-gen-claude-ux
 npm install
 npm run rebuild      # native rebuild for better-sqlite3 against Electron's Node ABI
 JARVIS_SEED_MOCKS=1 npm run dev
@@ -50,6 +50,40 @@ npm run typecheck     # both node + web tsconfig projects
 ```
 
 There is currently no test suite. Adding one (Vitest for renderer logic, Playwright for E2E flows) is on the [Roadmap](ROADMAP.md) and a great PR.
+
+## Building installers
+
+```bash
+npm run dist:mac      # .dmg + .zip, arm64 + x64
+npm run dist:linux    # .AppImage + .deb, arm64 + x64
+npm run dist:win      # NSIS .exe, x64
+npm run dist          # current platform, all targets
+npm run pack:dir      # unpacked app dir — fastest sanity check
+```
+
+The config lives in `electron-builder.yml`. `better-sqlite3` is rebuilt against Electron's Node ABI on every pack via `npmRebuild: true`, and its `.node` binary is `asarUnpack`-ed so it loads at runtime.
+
+To regenerate the app icon from the SVG source: `./scripts/build-icon.sh`.
+
+## Cutting a release
+
+1. Bump the version in `package.json` (semver: patch for fixes, minor for features).
+2. Commit: `git commit -am "Release v0.x.y"`.
+3. Tag and push: `git tag v0.x.y && git push origin main --tags`.
+4. The `release.yml` workflow fires on the tag push, builds macOS / Linux / Windows installers in parallel on hosted runners, and uploads them to a **draft** GitHub Release.
+5. Open the draft, write a changelog, click Publish. Auto-updater clients pick it up on next launch.
+
+For dry runs without cutting a real version, trigger the workflow manually from the Actions tab (`workflow_dispatch`).
+
+To enable codesigning + notarization for macOS, populate these as repo secrets and uncomment the CSC env block in `release.yml`:
+
+| Secret | What |
+| --- | --- |
+| `CSC_LINK` | base64-encoded `.p12` containing the Developer ID Application cert |
+| `CSC_KEY_PASSWORD` | password for the `.p12` |
+| `APPLE_ID` | Apple ID email |
+| `APPLE_APP_SPECIFIC_PASSWORD` | app-specific password from appleid.apple.com |
+| `APPLE_TEAM_ID` | 10-char team identifier from developer.apple.com |
 
 ## What needs work
 

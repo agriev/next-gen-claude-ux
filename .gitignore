@@ -2,6 +2,12 @@ node_modules
 out
 dist
 release
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.exe
+*.blockmap
 .DS_Store
 *.log
 .env

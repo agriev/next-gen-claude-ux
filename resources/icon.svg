@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!--
+    Interactive Jarvis app icon.
+
+    Visual: three cyan artifact nodes connected by Bézier edges on a deep
+    background — a literal pictogram of the spatial canvas.
+  -->
+
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#1A1F2A"/>
+      <stop offset="100%" stop-color="#0A0B0E"/>
+    </radialGradient>
+
+    <radialGradient id="nodeBig" cx="35%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#A8FFEC"/>
+      <stop offset="55%" stop-color="#5EEAD4"/>
+      <stop offset="100%" stop-color="#0E7C70"/>
+    </radialGradient>
+
+    <radialGradient id="nodeSmall" cx="35%" cy="35%" r="70%">
+      <stop offset="0%" stop-color="#E8EAED"/>
+      <stop offset="100%" stop-color="#8A8F98"/>
+    </radialGradient>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded-square background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="200" ry="200" fill="url(#bg)"/>
+
+  <!-- Subtle grid lines hinting at the canvas plane -->
+  <g stroke="#1F2530" stroke-width="2" opacity="0.4">
+    <line x1="0" y1="700" x2="1024" y2="700"/>
+    <line x1="0" y1="780" x2="1024" y2="780"/>
+    <line x1="200" y1="600" x2="200" y2="1024"/>
+    <line x1="824" y1="600" x2="824" y2="1024"/>
+  </g>
+
+  <!-- Edges (Bézier curves, like in the app) -->
+  <g fill="none" stroke="#5EEAD4" stroke-width="10" stroke-linecap="round" opacity="0.7" filter="url(#glow)">
+    <path d="M 320 380 C 460 280, 580 280, 720 380"/>
+    <path d="M 320 380 C 360 540, 440 640, 540 660"/>
+    <path d="M 720 380 C 680 540, 620 620, 540 660"/>
+  </g>
+
+  <!-- Three nodes -->
+  <g filter="url(#glow)">
+    <circle cx="320" cy="380" r="78" fill="url(#nodeSmall)"/>
+    <circle cx="720" cy="380" r="78" fill="url(#nodeSmall)"/>
+    <circle cx="540" cy="660" r="118" fill="url(#nodeBig)"/>
+  </g>
+
+  <!-- Subtle inner ring on the big node = "focused" artifact -->
+  <circle cx="540" cy="660" r="138" fill="none" stroke="#5EEAD4" stroke-width="4" opacity="0.55"/>
+</svg>
