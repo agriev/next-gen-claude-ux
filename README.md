@@ -1,5 +1,7 @@
 # Interactive Jarvis
 
+### The Claude UI you actually wanted.
+
 > **Concept / prototype.** Like Obsidian, but actually 3D — and like Iron Man's Jarvis, but actually possible now that LLMs are this good. A spatial workspace for working with large bodies of information, where you talk and Claude lays things out for you.
 
 <p align="center">
