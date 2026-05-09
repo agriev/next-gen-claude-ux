@@ -47,6 +47,27 @@ What's done, what's open. Items marked **★** are high-leverage if you're looki
 - [ ] Per-task budgets: `request_layout_pass(... maxBudgetUsd: 0.20)` — abort agent at threshold (the SDK already supports this option).
 - [ ] Sub-agent spawning surfaced in UI: when a Worker delegates via the SDK's `Task` tool, show a sub-chip in the Activity panel.
 
+## Open — backends & integrations
+
+- [ ] **★ Neo4j backend.** Pluggable storage layer behind `WorldState` so artifacts and edges live as a real graph. Cypher queries unlock `MATCH (a)-[:DERIVES*]->(b)` style retrieval, transitive cluster discovery, shortest-path explanations, and "show me everything 2 hops from @Mission". Two paths: (a) full swap of SQLite, or (b) Neo4j as a read-side replica synced from SQLite for graph queries while keeping SQLite as source of truth for ACID semantics.
+- [ ] **★ Obsidian vault as a backend.** Point Jarvis at an existing `~/Obsidian/<vault>/` folder. Each `.md` becomes an artifact (frontmatter → tags + spec, body → body); `[[wiki-link]]` syntax becomes `references` edges; `#tag` becomes tags. Two-way sync via the existing `chokidar` watcher in `fs-sync.ts` — your Obsidian and Jarvis stay aligned, you can keep using Obsidian Mobile / Sync, but get the spatial canvas + agents on top. Also makes onboarding zero-friction for the obvious target user.
+- [ ] Markdown vault as a board template — when creating a board, pick "from folder" and import an arbitrary directory as a one-shot.
+- [ ] Generic "graph plugin" interface: GraphQL / sqlite / neo4j / fs / GitHub Issues — same shape, different storage.
+- [ ] Bi-directional Linear / GitHub Issues sync as a board (each issue = artifact, status = tag, links = edges).
+
+## Open — speed (agents & layout)
+
+- [ ] **★ Local heuristic layout in a `worker_thread`.** Today every Layout pass is an LLM call. For most updates a force-directed simulation (springs along edges, repulsion between cards, attraction toward cluster centroids) does the job in 30 ms with no API cost. Use the LLM only for *new* reorganize requests where semantic understanding matters (`by-topic`, `free-form`).
+- [ ] **★ Streaming Worker output.** Today the Worker produces an artifact only after `create_artifact` returns. With SDK streaming events, render the card with `state: 'streaming'` immediately, fill body progressively as text comes in. Perceived latency drops from seconds to ~200 ms.
+- [ ] **★ Embeddings cache for similarity layout.** Compute a small embedding (e.g. 256-dim BGE-small via `@xenova/transformers`) for each artifact's `spec.summary` once, cache in SQLite. Use cosine similarity for `by-topic` clustering — instant, no LLM call for layout grouping. LLM only chooses *cluster names*.
+- [ ] **★ Smaller/faster model for incremental layout.** Layout currently uses Haiku for everything. Use a tiny local model (Ollama llama3.2:3b or Qwen2.5:3b) for "place this one new card relative to existing ones" via heuristic + structured output; reserve Anthropic Haiku for `reorganize` passes where reasoning matters.
+- [ ] Parallel sub-agent execution. When the Worker creates 3 artifacts that each need a `set_artifact_spec` call, run them concurrently.
+- [ ] Speculative artifact creation. While the model is still thinking, render a placeholder card with `state: 'streaming'` and a guessed shortName from the user's prompt. Replace once the real one arrives.
+- [ ] Spec-only context for Layout. Layout already only sees `spec` (≤200 tokens) — but the agent's full conversation history grows over time. Trim history aggressively: only keep the last N deltas, summarize older. Or use `forkSession` per reorganize to start fresh.
+- [ ] Pre-warm models. Call `query()` once at app startup with a no-op so the SDK process is ready when the user types their first prompt.
+- [ ] Adaptive throttle. Layout currently re-evaluates on every artifact upsert. Coalesce: if 3 cards arrive in 100 ms, send one combined delta instead of three.
+- [ ] GPU-accelerated layout. Three.js scene already has GPU; force-directed math could run on the GPU via compute shaders / WebGPU for massive boards.
+
 ## Open — content & UX
 
 - [ ] **Time-travel scrubber** — replay the canvas history between two timestamps. The data is there (every mutation goes through the bus); UI is missing.
