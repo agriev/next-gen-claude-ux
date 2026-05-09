@@ -7,7 +7,8 @@ export type UndoOp =
   | { kind: 'artifact-delete'; before: Artifact; after: null }
   | { kind: 'artifact-update'; before: Artifact; after: Artifact }
   | { kind: 'edge-create'; before: null; after: Edge }
-  | { kind: 'edge-delete'; before: Edge; after: null };
+  | { kind: 'edge-delete'; before: Edge; after: null }
+  | { kind: 'edge-update'; before: Edge; after: Edge };
 
 const MAX = 200;
 
@@ -73,6 +74,10 @@ export class UndoLog {
         await this.world.removeEdge(op.before.id);
         bus.emit('world', { type: 'edge.removed', id: op.before.id });
         break;
+      case 'edge-update':
+        await this.world.upsertEdge(op.after);
+        bus.emit('world', { type: 'edge.upserted', edge: op.after });
+        break;
     }
   }
 
@@ -95,6 +100,10 @@ export class UndoLog {
         bus.emit('world', { type: 'edge.removed', id: op.after.id });
         break;
       case 'edge-delete':
+        await this.world.upsertEdge(op.before);
+        bus.emit('world', { type: 'edge.upserted', edge: op.before });
+        break;
+      case 'edge-update':
         await this.world.upsertEdge(op.before);
         bus.emit('world', { type: 'edge.upserted', edge: op.before });
         break;

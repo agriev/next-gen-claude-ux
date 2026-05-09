@@ -184,7 +184,9 @@ export function Canvas() {
   };
 
   const clearSelection = () => {
+    const state = useWorldStore.getState();
     if (selected.size > 0) setSelected(new Set());
+    if (state.selectedEdgeId) state.setSelectedEdge(null);
   };
 
   return (

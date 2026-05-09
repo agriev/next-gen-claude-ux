@@ -15,11 +15,12 @@ const ROWS: Array<[string, string]> = [
   ['V', 'voice focus mode on selected'],
   ['E', 'connect 2+ selected (references)'],
   ['1 / 2 / 3 / 4', 'connect: derives/refs/contra/group'],
+  ['click on edge label', 'select edge → kind picker + delete'],
   ['arrows', 'navigate selection'],
   ['1..9 (no selection)', 'jump to bookmark'],
   ['Shift+1..9', 'save view as bookmark'],
   ['Cmd+Z / Cmd+Shift+Z', 'undo / redo'],
-  ['Backspace', 'delete selected'],
+  ['Backspace', 'delete selected card or edge'],
   ['Cmd+.', 'cancel all running agents'],
   ['Esc', 'clear selection / close']
 ];

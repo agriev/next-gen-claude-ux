@@ -66,12 +66,91 @@ export function buildLayoutTools(world: WorldState) {
 
   const removeEdge = tool(
     'remove_edge',
-    'Remove an edge by id.',
+    'Remove an edge by id. Use list_edges first to discover edge ids.',
     { id: z.string() },
     async args => {
       await world.removeEdge(args.id);
       bus.emit('world', { type: 'edge.removed', id: args.id });
       return { content: [{ type: 'text' as const, text: `removed ${args.id}` }] };
+    }
+  );
+
+  const listEdges = tool(
+    'list_edges',
+    'List all edges on the active board, or only those incident to a specific artifact (by id or shortName). Returns one row per edge: id, direction, endpoints (both id and shortName), kind, weight, optional label, and creator (user/worker/layout). Use this before update_edge or remove_edge so you know which edges already exist.',
+    {
+      artifactId: z.string().optional().describe('Optional id or shortName. When set, only edges where this artifact is src or dst are returned.'),
+      kind: z.enum(['derives', 'references', 'contradicts', 'groups-with']).optional()
+    },
+    async args => {
+      let target: Artifact | undefined;
+      if (args.artifactId) {
+        target = world.getArtifact(args.artifactId) ?? world.resolveShortName(args.artifactId);
+        if (!target) {
+          return { content: [{ type: 'text' as const, text: `error: no artifact ${args.artifactId}` }], isError: true };
+        }
+      }
+      const edges = world.getAllEdges().filter(e => {
+        if (target && e.src !== target.id && e.dst !== target.id) return false;
+        if (args.kind && e.kind !== args.kind) return false;
+        return true;
+      });
+      const rows = edges.map(e => {
+        const src = world.getArtifact(e.src);
+        const dst = world.getArtifact(e.dst);
+        return {
+          id: e.id,
+          src: e.src,
+          dst: e.dst,
+          srcShortName: src?.shortName ?? null,
+          dstShortName: dst?.shortName ?? null,
+          kind: e.kind,
+          weight: e.weight,
+          label: e.label ?? null,
+          createdBy: e.createdBy
+        };
+      });
+      const summary = `${rows.length} edge${rows.length === 1 ? '' : 's'}${target ? ` incident to @${target.shortName}` : ''}`;
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `${summary}\n${JSON.stringify(rows, null, 2)}`
+        }]
+      };
+    }
+  );
+
+  const updateEdge = tool(
+    'update_edge',
+    'Update an existing edge: change its kind, weight, or human-readable label. Pass only the fields you want to change. Use list_edges first to find the id.',
+    {
+      id: z.string(),
+      kind: z.enum(['derives', 'references', 'contradicts', 'groups-with']).optional(),
+      weight: z.number().optional(),
+      label: z.string().nullable().optional().describe('Pass null to clear an existing label, omit to leave unchanged.')
+    },
+    async args => {
+      const existing = world.getEdge(args.id);
+      if (!existing) {
+        return { content: [{ type: 'text' as const, text: `error: no edge ${args.id}` }], isError: true };
+      }
+      const updated: Edge = {
+        ...existing,
+        kind: (args.kind as EdgeKind) ?? existing.kind,
+        weight: args.weight ?? existing.weight,
+        label: args.label === null ? undefined : (args.label ?? existing.label)
+      };
+      await world.upsertEdge(updated);
+      bus.emit('world', { type: 'edge.upserted', edge: updated });
+      const changes: string[] = [];
+      if (args.kind !== undefined && args.kind !== existing.kind) changes.push(`kind ${existing.kind}→${args.kind}`);
+      if (args.weight !== undefined && args.weight !== existing.weight) changes.push(`weight ${existing.weight}→${args.weight}`);
+      if (args.label !== undefined && args.label !== existing.label) {
+        changes.push(args.label === null ? 'label cleared' : `label "${args.label}"`);
+      }
+      return {
+        content: [{ type: 'text' as const, text: `edge ${args.id} updated: ${changes.join(', ') || 'no-op'}` }]
+      };
     }
   );
 
@@ -128,7 +207,7 @@ export function buildLayoutTools(world: WorldState) {
   return createSdkMcpServer({
     name: 'layout-tools',
     version: '0.1.0',
-    tools: [placeOnCanvas, drawEdge, removeEdge, createCluster]
+    tools: [placeOnCanvas, drawEdge, removeEdge, listEdges, updateEdge, createCluster]
   });
 }
 
@@ -136,5 +215,7 @@ export const LAYOUT_TOOL_NAMES = [
   'mcp__layout-tools__place_on_canvas',
   'mcp__layout-tools__draw_edge',
   'mcp__layout-tools__remove_edge',
+  'mcp__layout-tools__list_edges',
+  'mcp__layout-tools__update_edge',
   'mcp__layout-tools__create_cluster'
 ] as const;

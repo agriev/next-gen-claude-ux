@@ -1,8 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useWorldStore } from '../store/world-store';
-import type { Artifact } from '@shared/types';
+import type { Artifact, Edge, EdgeKind } from '@shared/types';
 import { DraggablePanel } from './DraggablePanel';
 import { splitBody } from '../util/diagrams';
 import { DiagramRenderer } from './DiagramRenderer';
@@ -17,11 +17,32 @@ const KIND_TINT: Record<Artifact['kind'], string> = {
   cluster: '#A78BFA'
 };
 
+const EDGE_COLOR: Record<EdgeKind, string> = {
+  derives: '#5EEAD4',
+  references: '#8A8F98',
+  contradicts: '#FBBF24',
+  'groups-with': '#A78BFA'
+};
+
+const EDGE_KINDS: EdgeKind[] = ['derives', 'references', 'contradicts', 'groups-with'];
+
 export function Inspector() {
   const inspectorId = useWorldStore(s => s.inspectorArtifactId);
   const artifacts = useWorldStore(s => s.artifacts);
+  const edges = useWorldStore(s => s.edges);
   const setInspector = useWorldStore(s => s.setInspectorArtifact);
+  const selectedEdgeId = useWorldStore(s => s.selectedEdgeId);
+  const setSelectedEdge = useWorldStore(s => s.setSelectedEdge);
   const artifact = inspectorId ? artifacts.get(inspectorId) : null;
+
+  const incidentEdges = useMemo<Edge[]>(() => {
+    if (!inspectorId) return [];
+    const out: Edge[] = [];
+    for (const e of edges.values()) {
+      if (e.src === inspectorId || e.dst === inspectorId) out.push(e);
+    }
+    return out.sort((a, b) => a.kind.localeCompare(b.kind));
+  }, [edges, inspectorId]);
 
   const [editing, setEditing] = useState(false);
   const [draftBody, setDraftBody] = useState('');
@@ -209,6 +230,41 @@ export function Inspector() {
         </div>
       )}
 
+      {!editing && incidentEdges.length > 0 && (
+        <div style={{ padding: '8px 14px', borderBottom: '1px solid #1F2228' }}>
+          <div style={{
+            fontSize: 10,
+            color: '#5A5F68',
+            fontFamily: 'JetBrains Mono, monospace',
+            marginBottom: 4,
+            letterSpacing: 0.4,
+            textTransform: 'uppercase'
+          }}>
+            Connections · {incidentEdges.length}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {incidentEdges.map(e => (
+              <ConnectionRow
+                key={e.id}
+                edge={e}
+                anchorId={artifact.id}
+                artifacts={artifacts}
+                selected={selectedEdgeId === e.id}
+                onSelect={() => setSelectedEdge(selectedEdgeId === e.id ? null : e.id)}
+                onOpenOther={(otherId) => setInspector(otherId)}
+                onDelete={() => {
+                  void window.api.deleteEdge(e.id);
+                  if (selectedEdgeId === e.id) setSelectedEdge(null);
+                }}
+                onChangeKind={(kind) => {
+                  void window.api.updateEdge(e.id, { kind });
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {selection && !editing && (
         <div style={{ padding: '8px 14px', borderBottom: '1px solid #1F2228', background: 'rgba(94,234,212,0.05)' }}>
           <div style={{ fontSize: 10, color: '#5EEAD4', fontFamily: 'JetBrains Mono, monospace' }}>
@@ -355,6 +411,147 @@ function MarkdownView({ body, kind }: { body: string; kind: Artifact['kind'] }) 
         )
       )}
     </>
+  );
+}
+
+interface ConnectionRowProps {
+  edge: Edge;
+  anchorId: string;
+  artifacts: Map<string, Artifact>;
+  selected: boolean;
+  onSelect: () => void;
+  onOpenOther: (id: string) => void;
+  onDelete: () => void;
+  onChangeKind: (kind: EdgeKind) => void;
+}
+
+function ConnectionRow({
+  edge, anchorId, artifacts, selected,
+  onSelect, onOpenOther, onDelete, onChangeKind
+}: ConnectionRowProps) {
+  const outgoing = edge.src === anchorId;
+  const otherId = outgoing ? edge.dst : edge.src;
+  const other = artifacts.get(otherId);
+  const color = EDGE_COLOR[edge.kind];
+  const labelText = edge.label || edge.kind;
+
+  const [picking, setPicking] = useState(false);
+
+  return (
+    <div
+      onClick={onSelect}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 6px',
+        borderRadius: 4,
+        background: selected ? `${color}15` : 'transparent',
+        border: `1px solid ${selected ? `${color}88` : 'transparent'}`,
+        cursor: 'pointer',
+        fontSize: 12
+      }}
+      title={selected ? 'click again to deselect' : 'click to select edge in 3D'}
+    >
+      <span style={{
+        fontFamily: 'JetBrains Mono, monospace',
+        color: '#5A5F68',
+        fontSize: 11,
+        width: 14,
+        textAlign: 'center'
+      }}>
+        {outgoing ? '→' : '←'}
+      </span>
+
+      <button
+        onClick={e => { e.stopPropagation(); if (other) onOpenOther(other.id); }}
+        disabled={!other}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          color: other ? '#E8EAED' : '#5A5F68',
+          fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 12,
+          padding: 0,
+          cursor: other ? 'pointer' : 'default',
+          textDecoration: other ? 'underline dotted' : 'line-through',
+          textUnderlineOffset: 2
+        }}
+        title={other ? `Open @${other.shortName}` : 'artifact missing (other board?)'}
+      >
+        @{other ? other.shortName : otherId.slice(0, 6)}
+      </button>
+
+      <span style={{ flex: 1 }} />
+
+      <button
+        onClick={e => { e.stopPropagation(); setPicking(p => !p); }}
+        style={{
+          background: `${color}11`,
+          border: `1px solid ${color}55`,
+          borderRadius: 999,
+          padding: '1px 8px',
+          color,
+          fontSize: 10,
+          fontFamily: 'JetBrains Mono, monospace',
+          cursor: 'pointer'
+        }}
+        title="Change kind"
+      >
+        {labelText}
+      </button>
+
+      {picking && (
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            display: 'flex',
+            gap: 3,
+            padding: '2px 4px',
+            background: 'rgba(20,22,28,0.95)',
+            border: '1px solid #2A2D34',
+            borderRadius: 4
+          }}
+        >
+          {EDGE_KINDS.map(k => (
+            <button
+              key={k}
+              onClick={(e) => { e.stopPropagation(); onChangeKind(k); setPicking(false); }}
+              style={{
+                background: edge.kind === k ? `${EDGE_COLOR[k]}22` : 'transparent',
+                border: `1px solid ${EDGE_COLOR[k]}55`,
+                color: EDGE_COLOR[k],
+                borderRadius: 3,
+                padding: '1px 5px',
+                fontSize: 9,
+                fontFamily: 'JetBrains Mono, monospace',
+                cursor: 'pointer',
+                fontWeight: edge.kind === k ? 600 : 400
+              }}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <button
+        onClick={e => { e.stopPropagation(); onDelete(); }}
+        style={{
+          background: 'transparent',
+          border: '1px solid #FB718555',
+          borderRadius: 3,
+          color: '#FB7185',
+          fontSize: 10,
+          padding: '1px 6px',
+          cursor: 'pointer',
+          fontFamily: 'JetBrains Mono, monospace'
+        }}
+        title="Delete edge"
+      >
+        ✕
+      </button>
+    </div>
   );
 }
 

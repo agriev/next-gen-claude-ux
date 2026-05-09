@@ -92,6 +92,8 @@ export interface Edge {
   kind: EdgeKind;
   weight: number;
   createdBy: 'layout' | 'worker' | 'user';
+  /** Optional human label that overrides the kind name when rendering. */
+  label?: string;
 }
 
 export interface Action {

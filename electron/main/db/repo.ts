@@ -18,6 +18,7 @@ interface EdgeRow {
   id: string; session_id: string; board_id: string;
   src: string; dst: string;
   kind: string; weight: number; created_by: string;
+  label: string | null;
 }
 
 interface ActionRow {
@@ -81,7 +82,8 @@ function rowToEdge(r: EdgeRow): Edge {
   return {
     id: r.id, src: r.src, dst: r.dst,
     kind: r.kind as EdgeKind, weight: r.weight,
-    createdBy: r.created_by as Edge['createdBy']
+    createdBy: r.created_by as Edge['createdBy'],
+    label: r.label ?? undefined
   };
 }
 
@@ -274,13 +276,17 @@ export class Repo {
 
   upsertEdge(e: Edge, sessionId: string, boardId: string): void {
     this.db.prepare(`
-      INSERT INTO edges (id, session_id, board_id, src, dst, kind, weight, created_by)
-      VALUES (@id, @sessionId, @boardId, @src, @dst, @kind, @weight, @createdBy)
+      INSERT INTO edges (id, session_id, board_id, src, dst, kind, weight, created_by, label)
+      VALUES (@id, @sessionId, @boardId, @src, @dst, @kind, @weight, @createdBy, @label)
       ON CONFLICT(id) DO UPDATE SET
-        kind = excluded.kind, weight = excluded.weight, created_by = excluded.created_by
+        kind = excluded.kind,
+        weight = excluded.weight,
+        created_by = excluded.created_by,
+        label = excluded.label
     `).run({
       id: e.id, sessionId, boardId,
-      src: e.src, dst: e.dst, kind: e.kind, weight: e.weight, createdBy: e.createdBy
+      src: e.src, dst: e.dst, kind: e.kind, weight: e.weight, createdBy: e.createdBy,
+      label: e.label ?? null
     });
   }
 

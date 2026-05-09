@@ -2,8 +2,9 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { BufferGeometry, BufferAttribute, Vector3, Line, LineBasicMaterial, Group } from 'three';
-import type { Edge as EdgeData, Artifact } from '@shared/types';
+import type { Edge as EdgeData, Artifact, EdgeKind } from '@shared/types';
 import { getLivePos } from './live-transforms';
+import { useWorldStore } from '../store/world-store';
 
 const EDGE_COLOR: Record<EdgeData['kind'], string> = {
   derives: '#5EEAD4',
@@ -18,6 +19,8 @@ const EDGE_KIND_LABEL: Record<EdgeData['kind'], string> = {
   contradicts: '⚡ contradicts',
   'groups-with': 'groups'
 };
+
+const EDGE_KINDS: EdgeKind[] = ['derives', 'references', 'contradicts', 'groups-with'];
 
 interface Props {
   edge: EdgeData;
@@ -37,6 +40,10 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
   const lineRef = useRef<Line | null>(null);
   const labelGroupRef = useRef<Group>(null);
 
+  const selectedEdgeId = useWorldStore(s => s.selectedEdgeId);
+  const setSelectedEdge = useWorldStore(s => s.setSelectedEdge);
+  const selected = selectedEdgeId === edge.id;
+
   const positions = useMemo(() => new Float32Array(SAMPLES * 3), []);
   const geometry = useMemo(() => {
     const g = new BufferGeometry();
@@ -53,9 +60,15 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
   }), [edge.kind]);
 
   useEffect(() => {
-    material.opacity = dimmed ? 0.1 : (highlighted ? 1 : 0.45);
+    if (selected) {
+      material.color.set('#E8EAED'); // bright white when selected
+      material.opacity = 1;
+    } else {
+      material.color.set(EDGE_COLOR[edge.kind]);
+      material.opacity = dimmed ? 0.1 : (highlighted ? 1 : 0.45);
+    }
     material.needsUpdate = true;
-  }, [highlighted, dimmed, material]);
+  }, [highlighted, dimmed, material, edge.kind, selected]);
 
   useEffect(() => () => {
     geometry.dispose();
@@ -156,9 +169,24 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
     }
   });
 
-  const labelText = (edge as { label?: string }).label || EDGE_KIND_LABEL[edge.kind];
-  const accentColor = EDGE_COLOR[edge.kind];
+  const labelText = edge.label || EDGE_KIND_LABEL[edge.kind];
+  const accentColor = selected ? '#E8EAED' : EDGE_COLOR[edge.kind];
   const showLabel = !dimmed;
+
+  const handleLabelClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedEdge(selected ? null : edge.id);
+  };
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    void window.api.deleteEdge(edge.id);
+    setSelectedEdge(null);
+  };
+
+  const handleChangeKind = (kind: EdgeKind) => {
+    void window.api.updateEdge(edge.id, { kind });
+  };
 
   return (
     <>
@@ -169,24 +197,90 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
             center
             distanceFactor={14}
             zIndexRange={[6, 0]}
-            style={{ pointerEvents: 'none', userSelect: 'none' }}
+            style={{ userSelect: 'none' }}
           >
-            <div style={{
-              padding: '1px 6px',
-              background: 'rgba(10,11,14,0.85)',
-              border: `1px solid ${accentColor}55`,
-              borderRadius: 999,
-              color: accentColor,
-              fontSize: 9,
-              fontFamily: 'JetBrains Mono, monospace',
-              fontWeight: highlighted ? 600 : 400,
-              opacity: highlighted ? 1 : 0.75,
-              whiteSpace: 'nowrap',
-              letterSpacing: 0.2
-            }}>
+            <div
+              onClick={handleLabelClick}
+              onPointerDown={e => e.stopPropagation()}
+              style={{
+                padding: selected ? '2px 8px' : '1px 6px',
+                background: selected ? 'rgba(20,22,28,0.95)' : 'rgba(10,11,14,0.85)',
+                border: `1px solid ${selected ? accentColor : `${accentColor}55`}`,
+                borderRadius: 999,
+                color: accentColor,
+                fontSize: selected ? 10 : 9,
+                fontFamily: 'JetBrains Mono, monospace',
+                fontWeight: highlighted || selected ? 600 : 400,
+                opacity: selected ? 1 : (highlighted ? 1 : 0.75),
+                whiteSpace: 'nowrap',
+                letterSpacing: 0.2,
+                cursor: 'pointer',
+                pointerEvents: 'auto'
+              }}
+              title={selected
+                ? 'click to deselect · press Backspace to delete'
+                : 'click to select edge'}
+            >
               {labelText}
+              {selected && (
+                <span
+                  onClick={handleDelete}
+                  style={{
+                    marginLeft: 6,
+                    color: '#FB7185',
+                    cursor: 'pointer',
+                    fontWeight: 700
+                  }}
+                  title="Delete edge"
+                >
+                  ✕
+                </span>
+              )}
             </div>
           </Html>
+          {selected && (
+            <Html
+              center
+              distanceFactor={14}
+              zIndexRange={[7, 0]}
+              style={{ userSelect: 'none', pointerEvents: 'none' }}
+              position={[0, -0.5, 0]}
+            >
+              <div
+                onPointerDown={e => e.stopPropagation()}
+                style={{
+                  display: 'flex',
+                  gap: 4,
+                  padding: '3px 6px',
+                  background: 'rgba(20,22,28,0.95)',
+                  border: '1px solid #2A2D34',
+                  borderRadius: 6,
+                  pointerEvents: 'auto'
+                }}
+              >
+                {EDGE_KINDS.map(k => (
+                  <button
+                    key={k}
+                    onClick={e => { e.stopPropagation(); handleChangeKind(k); }}
+                    style={{
+                      background: edge.kind === k ? `${EDGE_COLOR[k]}22` : 'transparent',
+                      border: `1px solid ${edge.kind === k ? EDGE_COLOR[k] : `${EDGE_COLOR[k]}55`}`,
+                      color: EDGE_COLOR[k],
+                      borderRadius: 4,
+                      padding: '1px 6px',
+                      fontSize: 9,
+                      fontFamily: 'JetBrains Mono, monospace',
+                      cursor: 'pointer',
+                      fontWeight: edge.kind === k ? 600 : 400
+                    }}
+                    title={`Set kind to ${k}`}
+                  >
+                    {k}
+                  </button>
+                ))}
+              </div>
+            </Html>
+          )}
         </group>
       )}
     </>

@@ -20,8 +20,12 @@ const api = {
     ipcRenderer.invoke(IPC.cmd.unpinArtifact, { id }),
   moveArtifact: (id: string, position: Vec3): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.moveArtifact, { id, position }),
-  createEdge: (src: string, dst: string, kind: EdgeKind): Promise<void> =>
-    ipcRenderer.invoke(IPC.cmd.createEdge, { src, dst, kind }),
+  createEdge: (src: string, dst: string, kind: EdgeKind, label?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.cmd.createEdge, { src, dst, kind, label }),
+  deleteEdge: (id: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.cmd.deleteEdge, { id }),
+  updateEdge: (id: string, opts: { kind?: EdgeKind; weight?: number; label?: string | null }): Promise<void> =>
+    ipcRenderer.invoke(IPC.cmd.updateEdge, { id, ...opts }),
   deleteArtifact: (id: string): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.deleteArtifact, { id }),
   updateCameraFocus: (target: Vec3, eye: Vec3): Promise<void> =>

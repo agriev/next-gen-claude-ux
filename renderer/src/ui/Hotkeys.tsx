@@ -128,7 +128,15 @@ export function Hotkeys() {
         }
       }
       if (!inEditable && (e.key === 'Backspace' || e.key === 'Delete')) {
-        const sel = [...useWorldStore.getState().selectedIds];
+        const state = useWorldStore.getState();
+        const edgeId = state.selectedEdgeId;
+        if (edgeId) {
+          e.preventDefault();
+          void window.api.deleteEdge(edgeId);
+          state.setSelectedEdge(null);
+          return;
+        }
+        const sel = [...state.selectedIds];
         if (sel.length === 0) return;
         e.preventDefault();
         for (const id of sel) void window.api.deleteArtifact(id);
@@ -136,7 +144,9 @@ export function Hotkeys() {
         return;
       }
       if (e.key === 'Escape' && !inEditable) {
-        setSelected(new Set());
+        const state = useWorldStore.getState();
+        if (state.selectedEdgeId) state.setSelectedEdge(null);
+        else setSelected(new Set());
       }
     };
     window.addEventListener('keydown', handler);

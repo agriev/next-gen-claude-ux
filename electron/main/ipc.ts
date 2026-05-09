@@ -3,7 +3,8 @@ import { nanoid } from 'nanoid';
 import { IPC } from '../../shared/ipc-channels';
 import type {
   SubmitUtterancePayload, CancelActionPayload, MoveArtifactPayload, PinArtifactPayload,
-  CreateEdgePayload, DeleteArtifactPayload, UpdateCameraFocusPayload,
+  CreateEdgePayload, DeleteEdgePayload, UpdateEdgePayload,
+  DeleteArtifactPayload, UpdateCameraFocusPayload,
   UpdateArtifactBodyPayload, RenameArtifactPayload, SetArtifactTagsPayload,
   RefineArtifactPayload, CreateHighlightPayload, CreateAttachmentArtifactPayload,
   CreateBoardPayload, SwitchBoardPayload, RenameBoardPayload, MoveArtifactToBoardPayload,
@@ -197,11 +198,34 @@ export function registerIpc(
       dst: payload.dst,
       kind: payload.kind,
       weight: 1,
-      createdBy: 'user'
+      createdBy: 'user',
+      label: payload.label
     };
     await world.upsertEdge(edge);
     bus.emit('world', { type: 'edge.upserted', edge });
     orchestrator.undoLog.push({ kind: 'edge-create', before: null, after: edge });
+  });
+
+  ipcMain.handle(IPC.cmd.deleteEdge, async (_e, payload: DeleteEdgePayload) => {
+    const before = world.getEdge(payload.id);
+    if (!before) return;
+    await world.removeEdge(payload.id);
+    bus.emit('world', { type: 'edge.removed', id: payload.id });
+    orchestrator.undoLog.push({ kind: 'edge-delete', before, after: null });
+  });
+
+  ipcMain.handle(IPC.cmd.updateEdge, async (_e, payload: UpdateEdgePayload) => {
+    const before = world.getEdge(payload.id);
+    if (!before) return;
+    const after: Edge = {
+      ...before,
+      kind: payload.kind ?? before.kind,
+      weight: payload.weight ?? before.weight,
+      label: payload.label === null ? undefined : (payload.label ?? before.label)
+    };
+    await world.upsertEdge(after);
+    bus.emit('world', { type: 'edge.upserted', edge: after });
+    orchestrator.undoLog.push({ kind: 'edge-update', before, after });
   });
 
   ipcMain.handle(IPC.cmd.deleteArtifact, async (_e, payload: DeleteArtifactPayload) => {

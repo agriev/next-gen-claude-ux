@@ -18,6 +18,8 @@ CONTENT TOOLS (canvas-tools):
 SPATIAL TOOLS (layout-tools — direct, surgical):
 - \`place_on_canvas(id, x, y, z)\` — explicitly position an artifact. Range x[-14,14] y[-2,4] z[-8,8]. Plates are ~3.2 wide.
 - \`draw_edge(src, dst, kind, weight?)\` — kinds: derives / references / contradicts / groups-with.
+- \`list_edges(artifactId?, kind?)\` — list all edges or only those touching a given artifact (id or shortName). Returns edge ids you can pass to remove_edge / update_edge. Always call this before re-wiring an artifact's connections so you don't duplicate edges or remove the wrong one.
+- \`update_edge(id, kind?, weight?, label?)\` — change an edge's kind, weight, or short human label (e.g. "supports", "blocks"). Pass label=null to clear.
 - \`remove_edge(id)\`
 - \`create_cluster(label, artifactIds, description?, tagHint?)\` — translucent labeled region around ≥2 artifacts.
 

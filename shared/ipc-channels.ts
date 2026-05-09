@@ -10,6 +10,8 @@ export const IPC = {
     unpinArtifact: 'cmd:unpin-artifact',
     moveArtifact: 'cmd:move-artifact',
     createEdge: 'cmd:create-edge',
+    deleteEdge: 'cmd:delete-edge',
+    updateEdge: 'cmd:update-edge',
     deleteArtifact: 'cmd:delete-artifact',
     updateCameraFocus: 'cmd:update-camera-focus',
 
@@ -87,6 +89,19 @@ export interface CreateEdgePayload {
   src: string;
   dst: string;
   kind: 'derives' | 'references' | 'contradicts' | 'groups-with';
+  label?: string;
+}
+
+export interface DeleteEdgePayload {
+  id: string;
+}
+
+export interface UpdateEdgePayload {
+  id: string;
+  kind?: 'derives' | 'references' | 'contradicts' | 'groups-with';
+  weight?: number;
+  /** Pass null to clear, omit to leave unchanged. */
+  label?: string | null;
 }
 
 export interface DeleteArtifactPayload {

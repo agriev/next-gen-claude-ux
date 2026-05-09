@@ -159,6 +159,12 @@ const MIGRATIONS: Migration[] = [
       INSERT INTO app_state (key, value) VALUES ('active_board_id', 'default');
       INSERT INTO app_state (key, value) VALUES ('onboarded', '0');
     `
+  },
+  {
+    version: 4,
+    sql: `
+      ALTER TABLE edges ADD COLUMN label TEXT;
+    `
   }
 ];
 

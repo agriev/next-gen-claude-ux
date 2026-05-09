@@ -38,6 +38,10 @@ Click `? shortcuts` bottom-left in the app to see this list inline.
 | `2` | connect with `references` |
 | `3` | connect with `contradicts` |
 | `4` | connect with `groups-with` |
+| click edge label | select edge — opens inline kind picker + delete (`✕`) |
+| `Backspace` (with edge selected) | delete edge |
+| `Esc` (with edge selected) | deselect edge |
+| Inspector → Connections | list all incident edges with delete + kind picker per row; click `@shortName` to jump to the other side |
 
 ## Camera
 
@@ -76,6 +80,7 @@ Click `? shortcuts` bottom-left in the app to see this list inline.
 | `Cmd+Z` | undo |
 | `Cmd+Shift+Z` | redo |
 | `Cmd+.` | cancel all running agents |
+| `Backspace` (with selection) | delete selected artifact(s) — or selected edge if one is highlighted |
 
 ## Voice (best-effort)
 

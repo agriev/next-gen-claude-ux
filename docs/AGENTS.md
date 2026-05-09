@@ -23,6 +23,8 @@ layout-tools (also exposed to Worker):
   place_on_canvas(id, x, y, z)
   draw_edge(src, dst, kind, weight?)
   remove_edge(id)
+  list_edges(artifactId?, kind?)            ← discover existing edges before re-wiring
+  update_edge(id, kind?, weight?, label?)   ← change an edge's type or short label
   create_cluster(label, artifactIds, description?, tagHint?)
 ```
 
@@ -32,7 +34,7 @@ layout-tools (also exposed to Worker):
 >
 > CONTENT TOOLS — `create_artifact` (kinds: doc/note/code/log/image/link). Pick a short distinctive shortName. Call `set_artifact_spec` after to give Layout something to relate it to.
 >
-> SPATIAL TOOLS — `place_on_canvas` for explicit positioning ("next to @Atlas"), `draw_edge` for connections, `create_cluster` for grouping ≥2 cards. Coordinate range x[-14,14] y[-2,4] z[-8,8]. Plates are ~3.2 wide.
+> SPATIAL TOOLS — `place_on_canvas` for explicit positioning ("next to @Atlas"), `draw_edge` / `list_edges` / `update_edge` / `remove_edge` for connections, `create_cluster` for grouping ≥2 cards. Coordinate range x[-14,14] y[-2,4] z[-8,8]. Plates are ~3.2 wide. Always call `list_edges` before re-wiring an artifact's connections — gets you the existing ids and avoids duplicates.
 >
 > DELEGATION — `request_layout_pass` for big-picture reorganizes ("lay out by topic"). Don't combine with manual placement.
 >

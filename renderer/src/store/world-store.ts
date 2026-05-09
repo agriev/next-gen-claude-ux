@@ -23,6 +23,7 @@ interface WorldStore {
   targetPositions: Map<string, Vec3>;
   listeningStatus: ListeningStatus;
   selectedIds: Set<string>;
+  selectedEdgeId: string | null;
   expandedActionId: string | null;
   frameAllAt: number;
   autoFramedOnce: boolean;
@@ -71,6 +72,7 @@ interface WorldStore {
   appendAgentLog: (e: AgentLogEvent) => void;
 
   setSelected: (ids: Set<string>) => void;
+  setSelectedEdge: (id: string | null) => void;
   setExpandedAction: (id: string | null) => void;
   setInspectorArtifact: (id: string | null) => void;
   setFocusedArtifact: (id: string | null) => void;
@@ -101,6 +103,7 @@ export const useWorldStore = create<WorldStore>(set => ({
   targetPositions: new Map(),
   listeningStatus: 'idle',
   selectedIds: new Set(),
+  selectedEdgeId: null,
   expandedActionId: null,
   frameAllAt: 0,
   autoFramedOnce: false,
@@ -162,6 +165,7 @@ export const useWorldStore = create<WorldStore>(set => ({
     let listeningStatus = state.listeningStatus;
     let utterancePreview = state.utterancePreview;
     let activeBoardId = state.activeBoardId;
+    let selectedEdgeId = state.selectedEdgeId;
     for (const e of events) {
       switch (e.type) {
         case 'artifact.upserted':
@@ -182,6 +186,7 @@ export const useWorldStore = create<WorldStore>(set => ({
           break;
         case 'edge.removed':
           edges.delete(e.id);
+          if (selectedEdgeId === e.id) selectedEdgeId = null;
           break;
         case 'layout.updated':
           for (const p of e.positions) targets.set(p.id, { x: p.x, y: p.y, z: p.z });
@@ -201,6 +206,7 @@ export const useWorldStore = create<WorldStore>(set => ({
           edges.clear();
           targets.clear();
           bookmarks.clear();
+          selectedEdgeId = null;
           // following artifact.upserted / edge.upserted events from the same batch
           // will refill the maps from the new board's data
           break;
@@ -234,7 +240,8 @@ export const useWorldStore = create<WorldStore>(set => ({
     return {
       artifacts, edges, actions, targetPositions: targets,
       boards, bookmarks, notifications, undoCount, redoCount, layoutHistoryCount,
-      modelSettings, listeningStatus, utterancePreview, activeBoardId
+      modelSettings, listeningStatus, utterancePreview, activeBoardId,
+      selectedEdgeId
     };
   }),
 
@@ -252,7 +259,11 @@ export const useWorldStore = create<WorldStore>(set => ({
     return { actionLogs: next };
   }),
 
-  setSelected: ids => set({ selectedIds: ids }),
+  setSelected: ids => set({ selectedIds: ids, selectedEdgeId: null }),
+  setSelectedEdge: id => set(state => ({
+    selectedEdgeId: id,
+    selectedIds: id ? new Set<string>() : state.selectedIds
+  })),
   setExpandedAction: id => set({ expandedActionId: id }),
   setInspectorArtifact: id => set({ inspectorArtifactId: id }),
   setFocusedArtifact: id => set({ focusedArtifactId: id }),

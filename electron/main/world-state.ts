@@ -315,6 +315,7 @@ export class WorldState {
 
   getArtifact(id: string): Artifact | undefined { return this.artifacts.get(id); }
   getAllArtifacts(): Artifact[] { return [...this.artifacts.values()]; }
+  getEdge(id: string): Edge | undefined { return this.edges.get(id); }
   getAllEdges(): Edge[] { return [...this.edges.values()]; }
   getRepo(): Repo { return this.repo; }
 
