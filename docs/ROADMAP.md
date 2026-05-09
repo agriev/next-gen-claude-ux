@@ -1,0 +1,89 @@
+# Roadmap
+
+What's done, what's open. Items marked **★** are high-leverage if you're looking for a meaty PR.
+
+## Done
+
+- [x] Electron + TypeScript + Three.js scaffold; main / preload / renderer split with contextIsolation.
+- [x] SQLite (WAL) data layer; migrations v1 → v3; in-memory `WorldState` mirror.
+- [x] Event bus + 16 ms IPC delta-coalescing; Zustand store on the renderer.
+- [x] R3F scene: artifact plates with canvas-2d textures (kind-styled), Bézier edges with spring-physics control points, billboarded labels, pinned/selected/state rims, cluster regions.
+- [x] Drag-to-move with shift modifier (auto-pin); click-without-movement = select; double-click = open Inspector.
+- [x] OrbitControls + auto-frame on first artifact arrival + manual `F`; top-down 2D ortho mode (`T`).
+- [x] Live-position registry so edges follow during drag, with mass/damping spring physics on control points.
+- [x] Inspector: markdown rendering (`react-markdown` + `remark-gfm`); in-place edit; `Refine via Worker` action; text-selection → `Make highlight` (creates child artifact + auto `derives` edge).
+- [x] PlantUML rendering via `plantuml-encoder` + `plantuml.com` SVG; Mermaid via dynamic CDN ESM import. Card face shows `📊 diagram inside` placeholder.
+- [x] Worker agent with full canvas-tools + layout-tools toolkit; `request_layout_pass` delegates to Layout.
+- [x] Layout agent: long-lived streaming-input; `place_on_canvas` / `draw_edge` / `remove_edge` / `create_cluster`; `reorganize` modes (by-type / by-tags / by-topic / by-time / free-form).
+- [x] Listening agent (wired, not active by default for keyboard input): `propose_action` / `cancel_action` / `mark_utterance_complete`.
+- [x] Layout-history stack + `↶ restore previous` (max 10 saved); deletes existing clusters before each pass.
+- [x] Cmd+Z / Cmd+Shift+Z undo/redo for user-initiated mutations.
+- [x] Multi-board switcher with per-board fs mirror (chokidar + simple-git auto-commit every 5 min).
+- [x] Filesystem sync: each artifact mirrored to `<userData>/boards/<id>/artifacts/<shortName>.<ext>`; bidirectional via watcher + sha256 diff.
+- [x] Drag-drop / paste of files and images → attachment artifact.
+- [x] Bookmarks (1..9 per board) — `Shift+1..9` save, `1..9` jump.
+- [x] Filter chips (kind / tag / pinned-only) — non-matching cards dim to 18% opacity.
+- [x] Cmd+F fuzzy search (`fuse.js` over title/shortName/body/spec/tags).
+- [x] Minimap, NotificationCenter, ActivityPanel, AgentActivityHud — all draggable, resizable, persisted via localStorage.
+- [x] ModelPicker per agent role (Worker / Layout / Listening / Naming) with live `setModel()` for streaming agents.
+- [x] Onboarding tour (3-step), Help Hint panel with full shortcut list.
+- [x] Voice (best-effort): Web Speech via `webkitSpeechRecognition`, PTT (hold Space), continuous toggle, focus-to-card mode (`V`).
+- [x] Marketing-strategy demo seed: 19 cards, 23 edges, 1 PlantUML funnel diagram.
+
+## Open — high-leverage ★
+
+- [ ] **★ Local Whisper.** Offline STT via `@xenova/transformers` (Whisper-tiny ONNX in WASM, ~40 MB). Bundled model with first-run download. Replaces the offline-broken Web Speech path. Chunked encode in a `worker_thread` so the main UI stays responsive.
+- [ ] **★ Test harness.** Vitest for `WorldState`, `UndoLog`, `splitBody` (diagram extraction), `live-transforms`. Playwright E2E for "type a prompt → ≥2 cards appear with edges → Cmd+F finds them → Cmd+L by-type creates clusters → restore previous".
+- [ ] **★ Long-lived agent auto-restart.** On 429/5xx or transport error, exponential backoff + restart, with circuit-breaker chip visible in HUD.
+- [ ] **★ Plugin/hook system.** Third-party MCP tools loaded at startup via `~/.jarvis/plugins/*.js`; agents declare which plugins they have access to. Lets community ship "Jira browser tool" / "Calendar tool" / etc without forking.
+- [ ] **★ Force-directed 3D layout.** Heuristic positioning in a `worker_thread` based on edges (springs) + repulsion + cluster attraction. Layout agent then *hints* positions instead of computing them from scratch — much faster, much cheaper.
+
+## Open — agents & intelligence
+
+- [ ] Naming agent as its own short `query()` — currently inline in Worker. Cleaner cost accounting and easier to swap models for it.
+- [ ] Auto-tagging daemon: rolls over new artifacts, assigns `spec.tags` based on body content. Drives FilterChips automatically.
+- [ ] RAG Q&A: "what do I know about X?" — embeddings of all artifacts in a local vector store; agent answers with @-citations.
+- [ ] Daily digest agent: once per N hours, produces a summary card "what changed today / what's still open".
+- [ ] Per-task budgets: `request_layout_pass(... maxBudgetUsd: 0.20)` — abort agent at threshold (the SDK already supports this option).
+- [ ] Sub-agent spawning surfaced in UI: when a Worker delegates via the SDK's `Task` tool, show a sub-chip in the Activity panel.
+
+## Open — content & UX
+
+- [ ] **Time-travel scrubber** — replay the canvas history between two timestamps. The data is there (every mutation goes through the bus); UI is missing.
+- [ ] Context-menu on cards (right-click): pin/unpin, color-tag, copy id, copy as markdown, delete, etc.
+- [ ] Multi-line input bar (Shift+Enter for newline; Cmd+Enter to submit).
+- [ ] Card resize via corner handle — `Artifact` plate currently fixed-size.
+- [ ] Theme system (light/dark/ambient).
+- [ ] Drag a card onto a board chip in the switcher to move it between boards (IPC already exists).
+- [ ] Disambiguation prompt for `@-` references when shortNames collide across boards.
+
+## Open — performance & scale
+
+- [ ] Bundled font for drei `<Text>` so we can stop using HTML overlays for short-name labels (HTML doesn't scale past ~200 cards). troika-three-text + a packaged `.woff` of Inter would do it.
+- [ ] Atlased card textures or instanced meshes when the board has 500+ artifacts.
+- [ ] Frustum-culling and LOD for distant artifacts (just labels at distance, full plates up close).
+- [ ] Streaming snapshot: don't send 500 artifacts in one IPC `getSnapshot` — page them.
+
+## Open — boring but important
+
+- [ ] CI: GitHub Action that runs `npm run typecheck` on every PR.
+- [ ] `electron-builder` packaging for macOS (.dmg) / Linux (.AppImage) / Windows (.exe) with native binary handling for `better-sqlite3`.
+- [ ] App-update mechanism (electron-updater).
+- [ ] `safeStorage` for `ANTHROPIC_API_KEY` so it isn't exposed via env vars.
+- [ ] Settings panel (currently only ModelPicker exposes settings; need a place for fs-sync toggle, theme, agent-pause, etc.).
+- [ ] Crash recovery view on relaunch ("you had 3 unfinished actions; resume? cancel?").
+
+---
+
+## Open product questions
+
+These are unresolved in the [original master plan](https://github.com/anthropics/.../) and worth thinking about as concrete features land:
+
+1. **Idle policy.** When the user is silent for N minutes, does Listening sleep? Does Layout re-pass on a timer? Currently both stay alive and idle.
+2. **Voice transition UX.** Right now the PTT button lives at fixed position; should be more discoverable when voice becomes the primary mode.
+3. **Conflict resolution.** Two Workers updating one artifact simultaneously — currently last-write-wins. Lock? Merge?
+4. **Sub-agent surfacing.** Worker spawning a sub-Worker — separate chip vs roll up to parent.
+5. **Disambiguation when `@-` reference is ambiguous** — auto-pick most-recent vs ask.
+6. **Export format.** What does "export this canvas" produce? Proposal: zip of artifact files + `canvas.json` with positions and edges.
+7. **Delete semantics.** Hard delete vs soft archive (deepest Z layer).
+8. **Reserved-word safety.** Blacklist verbs like `stop`, `cancel`, `delete` from the auto-name pool so a card's `@stop` doesn't conflict with a command.
