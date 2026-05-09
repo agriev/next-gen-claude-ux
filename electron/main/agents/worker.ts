@@ -1,10 +1,19 @@
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { nanoid } from 'nanoid';
+import fs from 'node:fs';
 import type { WorldState } from '../world-state';
 import { buildCanvasTools, CANVAS_TOOL_NAMES } from '../mcp/canvas-tools';
 import { buildLayoutTools, LAYOUT_TOOL_NAMES } from '../mcp/layout-tools';
 import { bus } from '../event-bus';
 import type { Action, ActionKind } from '../../../shared/types';
+
+type AnthropicContentBlockParam =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string }; title?: string };
+
+const ALLOWED_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+const MAX_INLINE_ATTACHMENT_BYTES = 5 * 1024 * 1024; // Anthropic limit per part
 
 const WORKER_SYSTEM_PROMPT = `You are the Worker agent inside a spatial knowledge tool. The user works on a 3D canvas where each meaningful output is a CARD ("artifact"). Your assistant text is hidden from the user — they only see what you put on the canvas.
 
@@ -56,6 +65,8 @@ export interface WorkerInput {
   text: string;
   references: string[];
   actionKind?: ActionKind;
+  /** Artifact ids of attachment artifacts to feed as image/document content blocks. */
+  attachmentArtifactIds?: string[];
 }
 
 export interface WorkerHandle {
@@ -91,6 +102,51 @@ export function spawnWorker(opts: SpawnOpts): WorkerHandle {
   promptParts.push(input.text);
   const fullPrompt = promptParts.join('\n');
 
+  // Build vision/document content blocks from attachment artifacts. If any are
+  // present, we hand the SDK an AsyncIterable<SDKUserMessage> that yields one
+  // structured message — text + image/document blocks — instead of a plain
+  // string prompt. Text-like attachments are already inlined into their
+  // artifact body, so they round-trip via @-references and don't need a block.
+  const attachmentBlocks: AnthropicContentBlockParam[] = [];
+  for (const aid of input.attachmentArtifactIds ?? []) {
+    const a = world.getArtifact(aid);
+    if (!a || !a.bodyPath) continue;
+    let bytes: Buffer;
+    try {
+      bytes = fs.readFileSync(a.bodyPath);
+    } catch (err) {
+      console.warn('[worker] could not read attachment', aid, err);
+      continue;
+    }
+    if (bytes.length > MAX_INLINE_ATTACHMENT_BYTES) {
+      bus.emit('agentLog', {
+        agentRole: 'worker', agentId, actionId, kind: 'note',
+        text: `attachment ${a.shortName} > 5 MB, skipping vision (still referenced as @${a.shortName})`,
+        ts: Date.now()
+      });
+      continue;
+    }
+    const data = bytes.toString('base64');
+    if (a.mime === 'application/pdf') {
+      attachmentBlocks.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data },
+        title: a.title
+      });
+    } else if (ALLOWED_IMAGE_MIME.has(a.mime)) {
+      attachmentBlocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: a.mime as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+          data
+        }
+      });
+    }
+    // Other MIMEs (text/*, etc.) already have content inlined into a.body — the
+    // agent picks them up via @-reference resolution above.
+  }
+
   const action: Action = {
     id: actionId,
     kind: input.actionKind ?? 'write',
@@ -120,9 +176,28 @@ export function spawnWorker(opts: SpawnOpts): WorkerHandle {
     let totalTokens = 0;
     let errorMsg: string | undefined;
 
+    let promptArg: string | AsyncIterable<SDKUserMessage>;
+    if (attachmentBlocks.length > 0) {
+      const sessionId = `worker-${actionId}`;
+      const blocks: AnthropicContentBlockParam[] = [
+        { type: 'text', text: fullPrompt },
+        ...attachmentBlocks
+      ];
+      const message: SDKUserMessage = {
+        type: 'user',
+        message: { role: 'user', content: blocks } as SDKUserMessage['message'],
+        parent_tool_use_id: null,
+        session_id: sessionId
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      promptArg = (async function* (): AsyncIterable<SDKUserMessage> { yield message; })();
+    } else {
+      promptArg = fullPrompt;
+    }
+
     try {
       const q = query({
-        prompt: fullPrompt,
+        prompt: promptArg,
         options: {
           model,
           systemPrompt: WORKER_SYSTEM_PROMPT,

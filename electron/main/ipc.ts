@@ -85,6 +85,15 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+const TEXT_LIKE_MIME = /^(text\/|application\/(json|xml|x-yaml|yaml|toml|x-ndjson|x-sh|javascript|typescript|x-typescript))/;
+const TEXT_BODY_LIMIT = 256 * 1024; // 256 KB
+
+function isTextLike(mime: string, filename: string): boolean {
+  if (TEXT_LIKE_MIME.test(mime)) return true;
+  // Fall back on extension since browsers occasionally hand us application/octet-stream.
+  return /\.(md|markdown|txt|json|jsonc|json5|ya?ml|toml|csv|tsv|sql|sh|zsh|bash|js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|java|kt|swift|c|h|cpp|hpp|cc|m|mm|css|scss|less|html|htm|xml|svg|env|gitignore|dockerfile|tf|hcl|conf|cfg|ini|log|diff|patch)$/i.test(filename);
+}
+
 export async function seedDemoEdges(world: WorldState, pairs: Array<[string, string, EdgeKind]>): Promise<void> {
   for (const [srcShort, dstShort, kind] of pairs) {
     const src = world.resolveShortName(srcShort);
@@ -149,7 +158,27 @@ export function registerIpc(
   ));
 
   ipcMain.handle(IPC.cmd.submitUtterance, async (_e, payload: SubmitUtterancePayload) => {
-    return orchestrator.ingestKeyboardUtterance(payload.text, payload.references);
+    const attachmentArtifactIds: string[] = [];
+    const additionalRefs: string[] = [];
+    for (const att of payload.attachments ?? []) {
+      try {
+        const artifact = await persistAttachment({
+          dataBase64: att.dataBase64,
+          mime: att.mime,
+          filename: att.filename
+        });
+        attachmentArtifactIds.push(artifact.id);
+        additionalRefs.push(artifact.shortName);
+      } catch (err) {
+        console.warn('[submit] failed to persist attachment', att.filename, err);
+      }
+    }
+    const allRefs = Array.from(new Set([...payload.references, ...additionalRefs]));
+    const result = orchestrator.ingestKeyboardUtterance(payload.text, allRefs, attachmentArtifactIds);
+    if ('actionId' in result) {
+      return { actionId: result.actionId, attachmentArtifactIds };
+    }
+    return { error: result.error, attachmentArtifactIds };
   });
 
   ipcMain.handle(IPC.cmd.cancelAction, async (_e, payload: CancelActionPayload) => {
@@ -286,7 +315,7 @@ export function registerIpc(
     });
   });
 
-  ipcMain.handle(IPC.cmd.createAttachmentArtifact, async (_e, payload: CreateAttachmentArtifactPayload) => {
+  async function persistAttachment(payload: CreateAttachmentArtifactPayload): Promise<Artifact> {
     const buf = Buffer.from(payload.dataBase64, 'base64');
     const sha = crypto.createHash('sha256').update(buf).digest('hex');
     const ext = mimeToExt(payload.mime, payload.filename);
@@ -296,7 +325,23 @@ export function registerIpc(
     const filePath = path.join(attDir, `${id}${ext}`);
     fs.writeFileSync(filePath, buf);
 
-    const kind: ArtifactKind = payload.mime.startsWith('image/') ? 'image' : 'doc';
+    const isImage = payload.mime.startsWith('image/');
+    const isPdf = payload.mime === 'application/pdf';
+    const textLike = isTextLike(payload.mime, payload.filename) && buf.length <= TEXT_BODY_LIMIT;
+    const kind: ArtifactKind = isImage ? 'image' : 'doc';
+
+    let body: string;
+    if (isImage) {
+      body = `![${payload.filename}](file://${filePath})`;
+    } else if (textLike) {
+      // Inline the actual text so the agent sees it immediately when @-referenced.
+      body = buf.toString('utf-8');
+    } else if (isPdf) {
+      body = `Attached PDF: ${payload.filename} (${formatBytes(buf.length)}). Vision-fed to the agent on the next prompt that references @${payload.filename.split('.')[0]}.`;
+    } else {
+      body = `Attached file: ${payload.filename} (${formatBytes(buf.length)})`;
+    }
+
     const baseName = (payload.title ?? payload.filename.split('.')[0] ?? 'Attachment').slice(0, 24);
     const shortName = world.uniqueShortName(baseName);
     const artifactId = nanoid(10);
@@ -308,15 +353,13 @@ export function registerIpc(
       mime: payload.mime,
       title: payload.title ?? payload.filename,
       shortName,
-      body: payload.mime.startsWith('image/')
-        ? `![${payload.filename}](file://${filePath})`
-        : `Attached file: ${payload.filename} (${formatBytes(buf.length)})`,
+      body,
       bodyPath: filePath,
       createdAt: now,
       updatedAt: now,
       createdBy: 'user',
       state: 'ready',
-      tags: ['attachment', payload.mime.startsWith('image/') ? 'image' : 'file'],
+      tags: ['attachment', isImage ? 'image' : (isPdf ? 'pdf' : 'file')],
       attachmentId: id,
       position: orchestrator.suggestSpawnPosition()
     };
@@ -333,6 +376,10 @@ export function registerIpc(
     await world.upsertArtifact(artifact);
     bus.emit('world', { type: 'artifact.upserted', artifact });
     return artifact;
+  }
+
+  ipcMain.handle(IPC.cmd.createAttachmentArtifact, async (_e, payload: CreateAttachmentArtifactPayload) => {
+    return persistAttachment(payload);
   });
 
   ipcMain.handle(IPC.cmd.createHighlight, async (_e, payload: CreateHighlightPayload) => {

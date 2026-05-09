@@ -54,7 +54,9 @@ If the idea resonates — **PRs are very welcome**. See [CONTRIBUTING.md](docs/C
 | Action | How |
 | --- | --- |
 | Ask Claude to write/research | type in the bar at the bottom (`/` to focus, `@cardName` to reference an existing card) |
-| Drop a file or paste an image | becomes an attachment artifact with auto-detected type |
+| Attach files to a prompt | drop them on the input bar / paste an image / click `📎` — images + PDFs go to Claude as vision blocks; text files are inlined |
+| Drop a file or paste an image (on the canvas) | becomes a standalone attachment artifact |
+| Resize the input bar | drag its top edge — the height is persisted |
 | Move a card | shift-drag (auto-pins it; layout agent will skip pinned cards) |
 | Connect two cards | select 2+, press `E` (references) or `1`/`2`/`3`/`4` (derives/refs/contradicts/groups) |
 | Inspect / edit content | double-click any card → markdown rendered, edit in place, refine via Claude, make highlights from selections |

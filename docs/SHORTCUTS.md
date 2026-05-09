@@ -9,7 +9,10 @@ Click `? shortcuts` bottom-left in the app to see this list inline.
 | `/` | focus the input bar |
 | `@` | autocomplete card shortNames |
 | `Enter` | submit prompt |
+| `Shift+Enter` | newline (multi-line input) |
 | `Esc` | blur back to canvas |
+| click `📎` / drag file / paste image | attach a file to the next prompt — images and PDFs go to Claude as vision blocks; text/markdown/code files get inlined as text |
+| drag the top edge of the bar | resize input area; height is persisted |
 
 ## Selection
 

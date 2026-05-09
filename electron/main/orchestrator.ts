@@ -18,6 +18,7 @@ interface SubmitParams {
   text: string;
   references: string[];
   kind?: ActionKind;
+  attachmentArtifactIds?: string[];
 }
 
 export class Orchestrator {
@@ -77,7 +78,12 @@ export class Orchestrator {
     }
     const handle = spawnWorker({
       world: this.world,
-      input: { text: params.text, references: params.references, actionKind: params.kind },
+      input: {
+        text: params.text,
+        references: params.references,
+        actionKind: params.kind,
+        attachmentArtifactIds: params.attachmentArtifactIds
+      },
       model: this.world.getModel('worker'),
       getDefaultPosition: () => this.suggestSpawnPosition(),
       requestLayoutPass: (mode, prompt) => this.requestReorganize(mode, prompt)
@@ -90,7 +96,11 @@ export class Orchestrator {
   }
 
   /** Route keyboard utterance: either direct submit or through Listening for utterance segmentation. */
-  ingestKeyboardUtterance(text: string, references: string[]): { actionId: string } | { error: string } {
+  ingestKeyboardUtterance(
+    text: string,
+    references: string[],
+    attachmentArtifactIds?: string[]
+  ): { actionId: string } | { error: string } {
     if (this.routeKeyboardThroughListening && this.listening.isRunning()) {
       this.keyboardSource.feedText(text);
       this.listening.feedChunk({
@@ -103,7 +113,7 @@ export class Orchestrator {
       });
       return { actionId: 'pending-listening' };
     }
-    return this.submit({ text, references });
+    return this.submit({ text, references, attachmentArtifactIds });
   }
 
   cancel(actionId: string): void {

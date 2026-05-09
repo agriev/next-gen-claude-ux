@@ -14,9 +14,11 @@ export function DropPaste() {
   useEffect(() => {
     const onPaste = async (e: ClipboardEvent) => {
       if (!e.clipboardData) return;
-      // Skip if pasting into editable
+      // Skip if pasting into editable — including the InputBar textarea, which
+      // handles its own attachment paste flow.
       const target = e.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      if (e.defaultPrevented) return;
       const items = [...e.clipboardData.items];
       for (const item of items) {
         if (item.kind === 'file') {
@@ -46,6 +48,11 @@ export function DropPaste() {
     const onDrop = async (e: DragEvent) => {
       setHovering(false);
       if (!e.dataTransfer) return;
+      // The InputBar drop handler calls preventDefault on the synthetic event,
+      // which sets `defaultPrevented` on the native event by the time it
+      // reaches window. Honour that — we'd otherwise create a duplicate
+      // standalone artifact for files already chipped into the prompt.
+      if (e.defaultPrevented) return;
       const files = [...e.dataTransfer.files];
       if (files.length === 0) return;
       e.preventDefault();

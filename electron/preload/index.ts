@@ -4,13 +4,17 @@ import type { WorldDeltaBatch, AgentLogEvent } from '../../shared/events';
 import type {
   WorldSnapshot, Vec3, Artifact, EdgeKind, Board, Bookmark
 } from '../../shared/types';
-import type { SearchResult } from '../../shared/ipc-channels';
+import type { SearchResult, PendingAttachment, SubmitUtteranceResponse } from '../../shared/ipc-channels';
 
 const DEBUG_CREATE_MOCK = 'cmd:debug-create-mock';
 
 const api = {
-  submitUtterance: (text: string, references: string[]): Promise<{ actionId: string }> =>
-    ipcRenderer.invoke(IPC.cmd.submitUtterance, { text, references }),
+  submitUtterance: (
+    text: string,
+    references: string[],
+    attachments?: PendingAttachment[]
+  ): Promise<SubmitUtteranceResponse> =>
+    ipcRenderer.invoke(IPC.cmd.submitUtterance, { text, references, attachments }),
   cancelAction: (actionId: string): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.cancelAction, { actionId }),
   cancelAll: (): Promise<void> => ipcRenderer.invoke(IPC.cmd.cancelAll),

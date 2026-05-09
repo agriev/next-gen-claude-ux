@@ -2,6 +2,9 @@ import { useState } from 'react';
 
 const ROWS: Array<[string, string]> = [
   ['/', 'focus input'],
+  ['Shift+Enter', 'newline in input (Enter submits)'],
+  ['📎 / drop / paste', 'attach files to the next prompt'],
+  ['drag top edge of input', 'resize input bar'],
   ['F', 'frame all'],
   ['T', 'top-down 2D mode'],
   ['Cmd+F', 'fuzzy search'],

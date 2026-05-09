@@ -66,6 +66,8 @@ export function installMockApi(): void {
     unpinArtifact: async () => undefined,
     moveArtifact: async () => undefined,
     createEdge: async () => undefined,
+    deleteEdge: async () => undefined,
+    updateEdge: async () => undefined,
     deleteArtifact: async () => undefined,
     updateCameraFocus: async () => undefined,
     updateArtifactBody: async () => undefined,

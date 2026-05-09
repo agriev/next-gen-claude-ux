@@ -67,9 +67,29 @@ export const IPC = {
   }
 } as const;
 
+export interface PendingAttachment {
+  /** base64-encoded file bytes */
+  dataBase64: string;
+  mime: string;
+  filename: string;
+}
+
 export interface SubmitUtterancePayload {
   text: string;
   references: string[];
+  /**
+   * Files to upload + attach to the prompt context. Each file becomes a regular
+   * attachment artifact AND is fed to Claude as a structured content block
+   * (image / document / inline text) so the agent can actually see it.
+   */
+  attachments?: PendingAttachment[];
+}
+
+export interface SubmitUtteranceResponse {
+  actionId?: string;
+  error?: string;
+  /** Artifacts created from the `attachments` array, in order. */
+  attachmentArtifactIds?: string[];
 }
 
 export interface CancelActionPayload {
