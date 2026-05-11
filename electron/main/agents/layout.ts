@@ -39,6 +39,17 @@ export class LayoutAgent {
   private running = false;
   private currentQuery: ReturnType<typeof query> | null = null;
 
+  // Per-reorganize telemetry. We start a window when the user requests a
+  // reorganize, count tool calls during it, and stamp wall-clock + cost when
+  // the next `result` event arrives. Streaming-input mode means each turn ends
+  // with its own result event, so this is reliable.
+  private currentTurn: {
+    label: string;
+    startedAt: number;
+    toolCalls: number;
+    artifactCount: number;
+  } | null = null;
+
   constructor(private world: WorldState) {}
 
   isRunning(): boolean { return this.running; }
@@ -91,7 +102,28 @@ export class LayoutAgent {
         if (msg.type === 'system') {
           console.log('[layout] system msg', (msg as { subtype?: string }).subtype);
         } else if (msg.type === 'result') {
-          console.log('[layout] result', (msg as { subtype?: string }).subtype);
+          const subtype = (msg as { subtype?: string }).subtype;
+          const usage = (msg as { usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } }).usage;
+          const cost = (msg as { total_cost_usd?: number }).total_cost_usd;
+          const tokens =
+            (usage?.input_tokens ?? 0) +
+            (usage?.output_tokens ?? 0) +
+            (usage?.cache_read_input_tokens ?? 0) +
+            (usage?.cache_creation_input_tokens ?? 0);
+          console.log('[layout] result', subtype);
+          if (this.currentTurn) {
+            const elapsed = Date.now() - this.currentTurn.startedAt;
+            const seconds = (elapsed / 1000).toFixed(1);
+            const dollars = typeof cost === 'number' ? `$${cost.toFixed(4)}` : '$?';
+            bus.emit('agentLog', {
+              agentRole: 'layout',
+              agentId: 'layout',
+              kind: 'note',
+              text: `✓ ${this.currentTurn.label} done in ${seconds}s · ${this.currentTurn.toolCalls} tool calls · ${tokens} tokens · ${dollars}${subtype && subtype !== 'success' ? ` · ${subtype}` : ''}`,
+              ts: Date.now()
+            });
+            this.currentTurn = null;
+          }
         } else if (msg.type === 'assistant') {
           for (const b of msg.message.content) {
             if (b.type === 'text' && b.text.trim()) {
@@ -111,6 +143,7 @@ export class LayoutAgent {
                 text: `→ ${(b as { name?: string }).name}(${argsStr})`,
                 ts: Date.now()
               });
+              if (this.currentTurn) this.currentTurn.toolCalls++;
             }
           }
         }
@@ -149,6 +182,18 @@ export class LayoutAgent {
       .filter(a => a.kind !== 'cluster')
       .map(a => this.minimal(a));
     console.log(`[layout] reorganize ${mode} on ${artifacts.length} artifacts${prompt ? ` (${prompt})` : ''}`);
+    const label = `reorganize ${mode}${prompt ? ` "${prompt.slice(0, 40)}"` : ''} on ${artifacts.length} cards`;
+    this.currentTurn = {
+      label,
+      startedAt: Date.now(),
+      toolCalls: 0,
+      artifactCount: artifacts.length
+    };
+    bus.emit('agentLog', {
+      agentRole: 'layout', agentId: 'layout',
+      kind: 'note', text: `▶ ${label} — model=${this.world.getModel('layout')}`,
+      ts: Date.now()
+    });
     bus.emit('agentLog', {
       agentRole: 'layout', agentId: 'layout',
       kind: 'tool', text: `→ reorganize(${mode}) on ${artifacts.length} artifacts`,

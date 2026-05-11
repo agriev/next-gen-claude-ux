@@ -20,6 +20,7 @@ import { VoiceController } from './ui/Voice';
 import { LayoutMenu } from './ui/LayoutMenu';
 import { ModelPicker } from './ui/ModelPicker';
 import { AgentActivityHud } from './ui/AgentActivityHud';
+import { LayoutActivityPanel } from './ui/LayoutActivityPanel';
 
 export function App() {
   useIpcBridge();
@@ -36,6 +37,7 @@ export function App() {
       <UndoBar />
       <NotificationCenter />
       <ActivityPanel />
+      <LayoutActivityPanel />
       <AgentActivityHud />
       <Toaster />
       <InputBar />
