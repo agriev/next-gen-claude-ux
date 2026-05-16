@@ -43,13 +43,6 @@ Rules:
  */
 const CONTEXT_RESET_THRESHOLD_TOKENS = 50_000;
 
-/**
- * Hard per-turn budget cap. A typical Haiku reorganize is well under $0.01;
- * $0.05 buys ~200K input tokens, plenty for big boards, but stops a runaway
- * turn from quietly burning money.
- */
-const MAX_BUDGET_USD_PER_TURN = 0.05;
-
 export class LayoutAgent {
   private queue = new AsyncQueue<SDKUserMessage>();
   private ctrl = new AbortController();
@@ -117,8 +110,10 @@ export class LayoutAgent {
           allowedTools: [...LAYOUT_TOOL_NAMES],
           tools: [],
           abortController: this.ctrl,
-          maxTurns: 1000,
-          maxBudgetUsd: MAX_BUDGET_USD_PER_TURN
+          maxTurns: 1000
+          // maxBudgetUsd intentionally omitted — kept hitting the cap on
+          // big boards. Restart-on-token-threshold (below) is the actual
+          // safety net; budget is now observed-only via the cost log line.
         }
       });
       this.currentQuery = q;
