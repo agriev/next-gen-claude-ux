@@ -28,6 +28,16 @@ export class AsyncQueue<T> {
 
   size(): number { return this.buffer.length; }
 
+  /**
+   * Snapshot and clear pending values. Used during a context restart so we can
+   * replay in-flight deltas onto the new queue. Does not affect waiters.
+   */
+  drain(): T[] {
+    const out = this.buffer;
+    this.buffer = [];
+    return out;
+  }
+
   async *[Symbol.asyncIterator](): AsyncGenerator<T> {
     while (true) {
       if (this.buffer.length > 0) {

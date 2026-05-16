@@ -164,51 +164,159 @@ export function buildLayoutTools(world: WorldState) {
       tagHint: z.string().optional().describe('Single-word tag, used for color hash and filtering')
     },
     async args => {
-      let cx = 0, cy = 0, cz = 0, n = 0;
-      for (const id of args.artifactIds) {
-        const a = world.getArtifact(id);
-        if (a?.position) {
-          cx += a.position.x; cy += a.position.y; cz += a.position.z; n++;
+      const cluster = await makeCluster(world, args);
+      const memberCount = (cluster.spec?.refs ?? []).length;
+      const p = cluster.position ?? { x: 0, y: 0, z: 0 };
+      return { content: [{ type: 'text' as const, text: `cluster ${cluster.shortName} (${memberCount} members) at (${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)})` }] };
+    }
+  );
+
+  const applyLayoutPlan = tool(
+    'apply_layout_plan',
+    'Apply an entire reorganize in ONE call. USE ONLY in response to reorganize deltas — this is the fast path. Atomic: places artifacts, optionally replaces edges, then creates clusters. For incremental upserts / hello / idle deltas, keep using place_on_canvas / draw_edge / create_cluster individually. Skipping pinned artifacts is automatic. Calling this with 30 placements is one Anthropic round-trip instead of 30.',
+    {
+      placements: z.array(z.object({
+        id: z.string(),
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      })).min(1).describe('All non-pinned placements for this reorganize. Coordinate range x[-14,14] y[-2,4] z[-8,8].'),
+      clusters: z.array(z.object({
+        label: z.string(),
+        artifactIds: z.array(z.string()).min(2),
+        description: z.string().optional(),
+        tagHint: z.string().optional()
+      })).optional().describe('Optional cluster definitions. Each cluster auto-centers on its members.'),
+      edges: z.array(z.object({
+        src: z.string(),
+        dst: z.string(),
+        kind: z.enum(['derives', 'references', 'contradicts', 'groups-with']),
+        weight: z.number().optional()
+      })).optional().describe('Optional new edges to draw.'),
+      replaceEdges: z.boolean().optional().describe('If true, delete all existing layout-created edges before adding the new ones. User-drawn edges are preserved.')
+    },
+    async args => {
+      // 1. Placements: skip pinned, batch-update positions
+      const placedPositions: Array<{ id: string; x: number; y: number; z: number }> = [];
+      let pinnedSkipped = 0;
+      let missing = 0;
+      for (const p of args.placements) {
+        const a = world.getArtifact(p.id);
+        if (!a) { missing++; continue; }
+        if (a.pinned) { pinnedSkipped++; continue; }
+        await world.setArtifactPosition(p.id, { x: p.x, y: p.y, z: p.z }, false);
+        placedPositions.push(p);
+      }
+      if (placedPositions.length > 0) {
+        bus.emit('world', { type: 'layout.updated', positions: placedPositions });
+      }
+
+      // 2. Optionally replace existing layout-created edges (preserve user-drawn ones).
+      let edgesRemoved = 0;
+      if (args.replaceEdges) {
+        for (const e of world.getAllEdges()) {
+          if (e.createdBy === 'layout') {
+            await world.removeEdge(e.id);
+            bus.emit('world', { type: 'edge.removed', id: e.id });
+            edgesRemoved++;
+          }
         }
       }
-      if (n > 0) { cx /= n; cy /= n; cz /= n; }
 
-      const baseName = args.label.split(/\s+/)[0]?.replace(/[^\w]/g, '') || 'Cluster';
-      const shortName = world.uniqueShortName(baseName);
-      const id = nanoid(10);
-      const now = Date.now();
-      const cluster: Artifact = {
-        id,
-        boardId: world.getActiveBoardId(),
-        kind: 'cluster',
-        mime: 'application/x-cluster',
-        title: args.label,
-        shortName,
-        body: args.description ?? args.label,
-        createdAt: now,
-        updatedAt: now,
-        createdBy: 'layout',
-        state: 'ready',
-        tags: args.tagHint ? [args.tagHint, 'cluster'] : ['cluster'],
-        spec: {
-          summary: args.description ?? args.label,
-          tags: args.tagHint ? [args.tagHint] : [],
-          refs: args.artifactIds,
-          tokens: Math.ceil((args.description?.length ?? 0) / 4)
-        },
-        position: { x: cx, y: cy, z: cz }
-      };
-      await world.upsertArtifact(cluster);
-      bus.emit('world', { type: 'artifact.upserted', artifact: cluster });
-      return { content: [{ type: 'text' as const, text: `cluster ${shortName} (${n} members) at (${cx.toFixed(1)},${cy.toFixed(1)},${cz.toFixed(1)})` }] };
+      // 3. Add new edges.
+      let edgesAdded = 0;
+      if (args.edges) {
+        for (const e of args.edges) {
+          if (e.src === e.dst) continue;
+          if (!world.getArtifact(e.src) || !world.getArtifact(e.dst)) continue;
+          const edge: Edge = {
+            id: nanoid(10),
+            src: e.src,
+            dst: e.dst,
+            kind: e.kind as EdgeKind,
+            weight: e.weight ?? 1,
+            createdBy: 'layout'
+          };
+          await world.upsertEdge(edge);
+          bus.emit('world', { type: 'edge.upserted', edge });
+          edgesAdded++;
+        }
+      }
+
+      // 4. Clusters.
+      let clustersCreated = 0;
+      if (args.clusters) {
+        for (const c of args.clusters) {
+          await makeCluster(world, c);
+          clustersCreated++;
+        }
+      }
+
+      const summary = [
+        `placed ${placedPositions.length}`,
+        pinnedSkipped ? `skipped ${pinnedSkipped} pinned` : null,
+        missing ? `${missing} missing` : null,
+        clustersCreated ? `${clustersCreated} clusters` : null,
+        edgesAdded ? `+${edgesAdded} edges` : null,
+        edgesRemoved ? `-${edgesRemoved} edges` : null
+      ].filter(Boolean).join(' · ');
+
+      return { content: [{ type: 'text' as const, text: `layout plan applied: ${summary}` }] };
     }
   );
 
   return createSdkMcpServer({
     name: 'layout-tools',
     version: '0.1.0',
-    tools: [placeOnCanvas, drawEdge, removeEdge, listEdges, updateEdge, createCluster]
+    tools: [placeOnCanvas, drawEdge, removeEdge, listEdges, updateEdge, createCluster, applyLayoutPlan]
   });
+}
+
+/**
+ * Build and persist a cluster artifact. Shared by `create_cluster` and
+ * `apply_layout_plan` so they emit identical events and short-name logic.
+ */
+async function makeCluster(
+  world: WorldState,
+  args: { label: string; artifactIds: string[]; description?: string; tagHint?: string }
+): Promise<Artifact> {
+  let cx = 0, cy = 0, cz = 0, n = 0;
+  for (const id of args.artifactIds) {
+    const a = world.getArtifact(id);
+    if (a?.position) {
+      cx += a.position.x; cy += a.position.y; cz += a.position.z; n++;
+    }
+  }
+  if (n > 0) { cx /= n; cy /= n; cz /= n; }
+
+  const baseName = args.label.split(/\s+/)[0]?.replace(/[^\w]/g, '') || 'Cluster';
+  const shortName = world.uniqueShortName(baseName);
+  const id = nanoid(10);
+  const now = Date.now();
+  const cluster: Artifact = {
+    id,
+    boardId: world.getActiveBoardId(),
+    kind: 'cluster',
+    mime: 'application/x-cluster',
+    title: args.label,
+    shortName,
+    body: args.description ?? args.label,
+    createdAt: now,
+    updatedAt: now,
+    createdBy: 'layout',
+    state: 'ready',
+    tags: args.tagHint ? [args.tagHint, 'cluster'] : ['cluster'],
+    spec: {
+      summary: args.description ?? args.label,
+      tags: args.tagHint ? [args.tagHint] : [],
+      refs: args.artifactIds,
+      tokens: Math.ceil((args.description?.length ?? 0) / 4)
+    },
+    position: { x: cx, y: cy, z: cz }
+  };
+  await world.upsertArtifact(cluster);
+  bus.emit('world', { type: 'artifact.upserted', artifact: cluster });
+  return cluster;
 }
 
 export const LAYOUT_TOOL_NAMES = [
@@ -217,5 +325,6 @@ export const LAYOUT_TOOL_NAMES = [
   'mcp__layout-tools__remove_edge',
   'mcp__layout-tools__list_edges',
   'mcp__layout-tools__update_edge',
-  'mcp__layout-tools__create_cluster'
+  'mcp__layout-tools__create_cluster',
+  'mcp__layout-tools__apply_layout_plan'
 ] as const;

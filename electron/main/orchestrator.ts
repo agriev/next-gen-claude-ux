@@ -154,6 +154,16 @@ export class Orchestrator {
 
   layoutHistoryCount(): number { return this.layoutHistory.length; }
 
+  /**
+   * Manual trigger to wipe the Layout agent's accumulated conversation and
+   * re-hello with the current snapshot. The agent does this automatically when
+   * its session crosses an input-token threshold; this is the user-facing
+   * escape hatch (future UI button / hotkey).
+   */
+  resetLayoutContext(): void {
+    this.layout.resetContext();
+  }
+
   async requestReorganize(mode: string, prompt?: string): Promise<void> {
     // 1. Snapshot current state for restore
     const positions: LayoutSnapshot['positions'] = [];
