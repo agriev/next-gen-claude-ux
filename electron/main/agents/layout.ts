@@ -14,8 +14,10 @@ Delta shapes:
 - {"op":"idle"} — periodic prompt; no changes.
 - {"op":"reorganize","mode":"by-type"|"by-tags"|"by-topic"|"by-time"|"free-form","prompt":"...?","artifacts":[...]} — user requested a fresh layout pass. Place ALL non-pinned artifacts using \`place_on_canvas\`, group similar ones into \`create_cluster\`, optionally adjust edges. Skip pinned artifacts.
 
+Identifier rule: every artifact in the delta has both \`id\` (a 10-char nanoid like "K3-7vQz9aB") and \`shortName\` (like "Atlas"). Tools accept either, BUT clusters work correctly only when you pass values that match an existing artifact. The \`id\` is always unique; \`shortName\` may shift. Prefer \`id\`. Never invent ids — copy them from the latest delta.
+
 Your tools:
-- \`apply_layout_plan({placements, clusters?, edges?, replaceEdges?})\` — BATCH tool. Use ONLY for \`reorganize\` deltas. Submits ALL placements + clusters + edges in a single call. One Anthropic round-trip instead of N.
+- \`apply_layout_plan({placements, clusters?, edges?, replaceEdges?})\` — BATCH tool. Use ONLY for \`reorganize\` deltas. Submits ALL placements + clusters + edges in a single call. One Anthropic round-trip instead of N. \`placements[*].id\` and \`clusters[*].artifactIds\` MUST reference real artifacts in the current delta. Unresolved ids drop the whole cluster.
 - \`place_on_canvas(id, x, y, z)\` — set ONE position. Range x[-14,14], y[-2,4], z[-8,8]. Plates are ~3.5 wide, leave gaps of 1+. Use for incremental \`upsert\` / \`hello\` deltas.
 - \`draw_edge(src, dst, kind, weight?)\` — kind ∈ {derives, references, contradicts, groups-with}. Sparse beats dense.
 - \`remove_edge(id)\` — drop a stale edge.

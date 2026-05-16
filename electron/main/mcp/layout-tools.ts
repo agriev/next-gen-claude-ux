@@ -5,6 +5,15 @@ import type { WorldState } from '../world-state';
 import type { Edge, EdgeKind, Artifact } from '../../../shared/types';
 import { bus } from '../event-bus';
 
+/**
+ * The model sometimes passes shortNames (`"Atlas"`) where we asked for ids,
+ * because shortNames are more memorable. Accept either and resolve to the
+ * full artifact. Returns `undefined` if neither path matches.
+ */
+function resolveArtifact(world: WorldState, idOrShortName: string): Artifact | undefined {
+  return world.getArtifact(idOrShortName) ?? world.resolveShortName(idOrShortName);
+}
+
 export function buildLayoutTools(world: WorldState) {
   const placeOnCanvas = tool(
     'place_on_canvas',
@@ -165,6 +174,12 @@ export function buildLayoutTools(world: WorldState) {
     },
     async args => {
       const cluster = await makeCluster(world, args);
+      if (!cluster) {
+        return {
+          content: [{ type: 'text' as const, text: `error: cluster "${args.label}" had fewer than 2 resolvable member ids (check ids/shortNames against the current board)` }],
+          isError: true
+        };
+      }
       const memberCount = (cluster.spec?.refs ?? []).length;
       const p = cluster.position ?? { x: 0, y: 0, z: 0 };
       return { content: [{ type: 'text' as const, text: `cluster ${cluster.shortName} (${memberCount} members) at (${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)})` }] };
@@ -196,16 +211,17 @@ export function buildLayoutTools(world: WorldState) {
       replaceEdges: z.boolean().optional().describe('If true, delete all existing layout-created edges before adding the new ones. User-drawn edges are preserved.')
     },
     async args => {
-      // 1. Placements: skip pinned, batch-update positions
+      // 1. Placements: skip pinned, batch-update positions. The model
+      // sometimes uses shortNames where we asked for ids — resolve both.
       const placedPositions: Array<{ id: string; x: number; y: number; z: number }> = [];
       let pinnedSkipped = 0;
       let missing = 0;
       for (const p of args.placements) {
-        const a = world.getArtifact(p.id);
+        const a = resolveArtifact(world, p.id);
         if (!a) { missing++; continue; }
         if (a.pinned) { pinnedSkipped++; continue; }
-        await world.setArtifactPosition(p.id, { x: p.x, y: p.y, z: p.z }, false);
-        placedPositions.push(p);
+        await world.setArtifactPosition(a.id, { x: p.x, y: p.y, z: p.z }, false);
+        placedPositions.push({ id: a.id, x: p.x, y: p.y, z: p.z });
       }
       if (placedPositions.length > 0) {
         bus.emit('world', { type: 'layout.updated', positions: placedPositions });
@@ -227,12 +243,13 @@ export function buildLayoutTools(world: WorldState) {
       let edgesAdded = 0;
       if (args.edges) {
         for (const e of args.edges) {
-          if (e.src === e.dst) continue;
-          if (!world.getArtifact(e.src) || !world.getArtifact(e.dst)) continue;
+          const srcA = resolveArtifact(world, e.src);
+          const dstA = resolveArtifact(world, e.dst);
+          if (!srcA || !dstA || srcA.id === dstA.id) continue;
           const edge: Edge = {
             id: nanoid(10),
-            src: e.src,
-            dst: e.dst,
+            src: srcA.id,
+            dst: dstA.id,
             kind: e.kind as EdgeKind,
             weight: e.weight ?? 1,
             createdBy: 'layout'
@@ -243,12 +260,14 @@ export function buildLayoutTools(world: WorldState) {
         }
       }
 
-      // 4. Clusters.
+      // 4. Clusters. makeCluster resolves member ids itself and skips
+      // groups with <2 valid members.
       let clustersCreated = 0;
+      let clustersDropped = 0;
       if (args.clusters) {
         for (const c of args.clusters) {
-          await makeCluster(world, c);
-          clustersCreated++;
+          const result = await makeCluster(world, c);
+          if (result) clustersCreated++; else clustersDropped++;
         }
       }
 
@@ -257,6 +276,7 @@ export function buildLayoutTools(world: WorldState) {
         pinnedSkipped ? `skipped ${pinnedSkipped} pinned` : null,
         missing ? `${missing} missing` : null,
         clustersCreated ? `${clustersCreated} clusters` : null,
+        clustersDropped ? `${clustersDropped} clusters dropped (unresolved members)` : null,
         edgesAdded ? `+${edgesAdded} edges` : null,
         edgesRemoved ? `-${edgesRemoved} edges` : null
       ].filter(Boolean).join(' · ');
@@ -275,19 +295,55 @@ export function buildLayoutTools(world: WorldState) {
 /**
  * Build and persist a cluster artifact. Shared by `create_cluster` and
  * `apply_layout_plan` so they emit identical events and short-name logic.
+ *
+ * Resolves member references id-or-shortName, drops unresolved ones, and
+ * returns `null` if fewer than 2 valid members remain — that way a cluster
+ * never lands at world origin because the model hallucinated ids.
  */
 async function makeCluster(
   world: WorldState,
   args: { label: string; artifactIds: string[]; description?: string; tagHint?: string }
-): Promise<Artifact> {
+): Promise<Artifact | null> {
+  // Resolve id-or-shortName once; keep only the real ids and drop anything
+  // we can't resolve. Without this a cluster whose members are bad strings
+  // ends up with centroid (0,0,0) AND `spec.refs` full of garbage, so the
+  // renderer's useFrame never finds a live position and the cluster sits
+  // stuck at the origin while its supposed members are placed elsewhere.
+  const resolvedIds: string[] = [];
   let cx = 0, cy = 0, cz = 0, n = 0;
-  for (const id of args.artifactIds) {
-    const a = world.getArtifact(id);
-    if (a?.position) {
+  const seen = new Set<string>();
+  const unresolved: string[] = [];
+  for (const ref of args.artifactIds) {
+    const a = resolveArtifact(world, ref);
+    if (!a) { unresolved.push(ref); continue; }
+    if (seen.has(a.id)) continue;
+    seen.add(a.id);
+    resolvedIds.push(a.id);
+    if (a.position) {
       cx += a.position.x; cy += a.position.y; cz += a.position.z; n++;
     }
   }
+
+  if (resolvedIds.length < 2) {
+    console.warn(
+      `[layout-tools] cluster "${args.label}" skipped: ${resolvedIds.length}/${args.artifactIds.length} members resolved`,
+      unresolved.length ? `unresolved: ${unresolved.join(', ')}` : ''
+    );
+    bus.emit('agentLog', {
+      agentRole: 'layout',
+      agentId: 'layout',
+      kind: 'note',
+      ts: Date.now(),
+      text: `⚠ cluster "${args.label}" dropped — only ${resolvedIds.length}/${args.artifactIds.length} member ids resolved${unresolved.length ? ` (unresolved: ${unresolved.slice(0, 3).join(', ')}${unresolved.length > 3 ? '…' : ''})` : ''}`
+    });
+    return null;
+  }
+
   if (n > 0) { cx /= n; cy /= n; cz /= n; }
+
+  if (unresolved.length > 0) {
+    console.warn(`[layout-tools] cluster "${args.label}" dropped ${unresolved.length} unresolved member refs:`, unresolved);
+  }
 
   const baseName = args.label.split(/\s+/)[0]?.replace(/[^\w]/g, '') || 'Cluster';
   const shortName = world.uniqueShortName(baseName);
@@ -309,7 +365,7 @@ async function makeCluster(
     spec: {
       summary: args.description ?? args.label,
       tags: args.tagHint ? [args.tagHint] : [],
-      refs: args.artifactIds,
+      refs: resolvedIds,
       tokens: Math.ceil((args.description?.length ?? 0) / 4)
     },
     position: { x: cx, y: cy, z: cz }
