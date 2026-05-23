@@ -23,6 +23,38 @@
 
 **Sort order:** Phase (E0 → E5), затем Priority (P0 → P2), затем по B-id.
 
+**Status markers (added как мы реализуем):**
+- ✓ — landed on main; card includes commit SHA in PR body
+- ↻ — partial / scoped down; remaining work in a follow-up card
+
+---
+
+## Status snapshot (как на May 2026)
+
+**E0 Foundation landed** через 6 waves:
+
+| Wave | PR | Cards | Status |
+|---|---|---|---|
+| 1 — Foundation | [#1](https://github.com/agriev/next-gen-claude-ux/pull/1) `d58c83d` | B01 ✓ · B05 ✓ · B28 ✓ | merged |
+| 2 — Schema + primitives | [#2](https://github.com/agriev/next-gen-claude-ux/pull/2) `ce760b6` | B02 ✓ · B10 ✓ · B17 ✓ | merged |
+| 3 — Agent representation | [#3](https://github.com/agriev/next-gen-claude-ux/pull/3) `689b0e5` | B04 ✓ · B09 ✓ | merged |
+| 4 — Interaction polish | [#4](https://github.com/agriev/next-gen-claude-ux/pull/4) `be35b36` | B03 ✓ · B07 ✓ · B11 ✓ | merged |
+| 5 — Console mode | [#5](https://github.com/agriev/next-gen-claude-ux/pull/5) `8b934d1` | B16 ✓ · B21 ✓ | merged |
+| 6 — Reliability | [#6](https://github.com/agriev/next-gen-claude-ux/pull/6) | B13 ✓ · B15 ✓ | in review |
+
+**Cards landed: 15 / 28** (E0 + E1 scope). Each wave's PR body documents deferred sub-cards.
+
+**Deferred to bis-waves** (small, intentional descopes):
+- B06 (reasoning-thread 3-idiom prototype) → Wave 3-bis
+- B08 (force-directed fallback worker_thread) → Wave 3-bis (depends on B06 trace data)
+- B12 (streaming Worker output) → Wave 6-bis
+- B14 (tool-call-trail) → Wave 4-bis (depends on B06)
+- B18 (horseshoe layout algo) → Wave 5-bis
+- B27 (lasso select 3D) → Wave 5-bis
+
+**Not yet started** (E1 viz):
+- B19 (chart-panel widget), B20 (flow-panel widget), B22 (timeline-axis), B23 (volume + graph-3d), B24 (camera fly-in), B25 (drill-down), B26 (time-travel scrubber)
+
 ---
 
 ## Index
@@ -43,7 +75,7 @@
 
 Цель эпохи: укрепить базу — typed link registry, ghost-preview, reasoning-trace MVP, cross-filter. См. [ROADMAP-v2.md §2 E0](ROADMAP-v2.md#e0-—-фундамент-месяцы-0-3).
 
-### [P0] B01 · Introduce CameraController abstraction
+### [P0] B01 · Introduce CameraController abstraction ✓ Wave 1 (`d58c83d`)
 **Why:** unblocks E2 WebXR migration (M1 in [AR-VR-BRIDGE.md](AR-VR-BRIDGE.md)); also unblocks B11 Console mode camera
 **What:** Refactor `<OrbitControls>` in `renderer/src/scene/Canvas.tsx:228` behind a `CameraController` interface; current behaviour becomes `OrbitCameraController` implementation
 **Files:**
@@ -57,7 +89,7 @@
 **Phase:** E0
 **AR-readiness:** +++ (enables XR camera swap)
 
-### [P0] B02 · Typed link_type registry (Edge.kind → Link Type)
+### [P0] B02 · Typed link_type registry (Edge.kind → Link Type) ✓ Wave 2 (`ce760b6`)
 **Why:** [TR4 tradeoffs](../research/synthesis/tradeoffs.md#tr4) — Palantir-style typed Object/Link/Action; addresses [T3 themes](../research/synthesis/themes.md#t3) (typed ontology beats free-form tags)
 **What:** Lift `Edge.kind: 'derives' | 'references' | 'contradicts' | 'groups-with'` to a registry (`link_type_registry` table). Built-in 4 kinds remain default; users (and agents) can register new link types with `label`, `color`, `icon`, `is_directed`
 **Files:**
@@ -73,7 +105,7 @@
 **Phase:** E0
 **AR-readiness:** neutral
 
-### [P0] B03 · Cross-filter / linked highlighting
+### [P0] B03 · Cross-filter / linked highlighting ✓ Wave 4 (`be35b36`)
 **Why:** [T6 themes](../research/synthesis/themes.md#t6) — *biggest leverage opportunity* — universal in BI, absent in agent tools
 **What:** Hover/select on artifact → all related artifacts (by edge, by cluster membership, by `spec.tags`, by `link_type`) highlight; non-related dim to 18% opacity per existing FilterChips convention
 **Files:**
@@ -87,7 +119,7 @@
 **Phase:** E0
 **AR-readiness:** + (works in 3D)
 
-### [P0] B04 · Intent-ghost (propose-then-commit for Layout)
+### [P0] B04 · Intent-ghost (propose-then-commit for Layout) ✓ Wave 3 (`689b0e5`)
 **Why:** [TR12 tradeoffs](../research/synthesis/tradeoffs.md#tr12) — ghost-preview for ≥5-artifact moves; avoids ⚠ Watch "Auto-layout that re-flows on every interaction"
 **What:** Layout agent's `apply_layout_plan(...)` becomes 2-step: `propose_layout_plan` (creates ghost artifacts), then user accepts (5s timeout or explicit confirm) → committed via existing path
 **Files:**
@@ -102,7 +134,7 @@
 **Phase:** E0
 **AR-readiness:** + (ghost-preview pattern works identically in AR)
 
-### [P0] B05 · Test harness — Vitest + Playwright
+### [P0] B05 · Test harness — Vitest + Playwright ↻ Wave 1 (`d58c83d`) — Vitest+ar-audit+CI landed; Playwright E2E deferred
 **Why:** existing v1 ROADMAP ★ item; safety net for B02 migration + B04 layout refactor
 **What:** Vitest unit tests for `WorldState`, `UndoLog`, `splitBody`, `live-transforms`. Playwright E2E for marketing-demo flow (type prompt → ≥2 cards → search → reorganize → restore)
 **Files:**
@@ -135,7 +167,7 @@
 **Phase:** E0
 **AR-readiness:** + (designed AR-portable from start: pure R3F, no `<Html>`)
 
-### [P0] B07 · Pivot-to-selection camera (TR2 non-default)
+### [P0] B07 · Pivot-to-selection camera (TR2 non-default) ✓ Wave 4 (`be35b36`)
 **Why:** [TR2 tradeoffs](../research/synthesis/tradeoffs.md#tr2) — Jarvis non-default; OrbitControls.target reads selectionIds
 **What:** When single artifact selected, camera target moves to that artifact (smooth tween 300ms); when multi-selected, target moves to bounding-box centroid OR don't move ([Q4.1 open-questions](../research/synthesis/open-questions.md))
 **Files:**
@@ -161,7 +193,7 @@
 **Phase:** E0
 **AR-readiness:** + (needed for AR frame-rate)
 
-### [P1] B09 · Agent-aura (ambient agent activity visualization)
+### [P1] B09 · Agent-aura (ambient agent activity visualization) ✓ Wave 3 (`689b0e5`)
 **Why:** [CONCEPT §4.1](CONCEPT.md#41-agent-aura-—-где-работает-см-129); Weiser calm-tech principle (Q1.4 — disembodied agents)
 **What:** When an agent is mid-action, render a diffuse colored glow (agent-coded: Worker cyan, Layout lavender, Listening amber, Naming rose) around the artifacts it's mutating. Fades 300ms after `result` event
 **Files:**
@@ -174,7 +206,7 @@
 **Phase:** E0
 **AR-readiness:** + (spatial audio in AR can layer on this — see B43)
 
-### [P1] B10 · Frame primitive (cluster with header + exportable unit)
+### [P1] B10 · Frame primitive (cluster with header + exportable unit) ✓ Wave 2 (`ce760b6`)
 **Why:** [WS-06 tldraw pattern](../research/06-spatial-canvases.md); [Q7.2 open-questions](../research/synthesis/open-questions.md)
 **What:** Add `kind: 'frame'` artifact — visually a labeled colored bar on top + rectangular region. Different from `cluster` (Layout-agent-created semantic group) — frame is user-created intentional group
 **Files:**
@@ -188,7 +220,7 @@
 **Phase:** E0
 **AR-readiness:** + (no DOM)
 
-### [P1] B11 · Marking menu (radial menu on artifacts)
+### [P1] B11 · Marking menu (radial menu on artifacts) ✓ Wave 4 (`be35b36`)
 **Why:** [WS-10 game UX](../research/10-game-3d-editor-ux.md) — 3.5× faster than linear menus; Q4.3 hybrid with Cmd+K
 **What:** Ctrl+drag on artifact → 4-8-action radial menu; select by direction. Initial set: pin, copy id, copy as md, delete, refine, focus
 **Files:**
@@ -215,7 +247,7 @@
 **Phase:** E0
 **AR-readiness:** neutral
 
-### [P1] B13 · Long-lived agent auto-restart
+### [P1] B13 · Long-lived agent auto-restart ✓ Wave 6 (PR #6)
 **Why:** existing v1 ROADMAP ★; reliability blocker for E2 (AR demands stability)
 **What:** On 429/5xx/transport error in Layout or Listening agent, exponential backoff + restart, circuit-breaker chip in HUD
 **Files:**
@@ -242,7 +274,7 @@
 **Phase:** E0
 **AR-readiness:** +
 
-### [P2] B15 · Naming agent as own short query
+### [P2] B15 · Naming agent as own short query ✓ Wave 6 (PR #6)
 **Why:** existing v1 ROADMAP; cleaner cost accounting + swappable model for naming
 **What:** Extract shortName generation from Worker inline into a separate `naming` agent (single-call query per artifact)
 **Files:**
@@ -261,7 +293,7 @@
 
 Цель эпохи: реализация WS-12 horseshoe + attention zones + alarm taxonomy.
 
-### [P0] B16 · Console mode toggle (Tab key)
+### [P0] B16 · Console mode toggle (Tab key) ✓ Wave 5 (`8b934d1`)
 **Why:** [WS-12 multi-dashboard horseshoe](../research/12-multi-dashboard-spatial.md); [VISION §6 E1](VISION.md#6-эпохи-тизер-roadmap-v2)
 **What:** Tab toggles scene between Canvas mode (current free-form orbit) and Console mode (stationary multi-anchor camera + horseshoe slots). Same `WorldState`, different `viewMode` setting
 **Files:**
@@ -275,7 +307,7 @@
 **Phase:** E1
 **AR-readiness:** + (Console mode IS AR-friendly pattern)
 
-### [P0] B17 · Panel primitive (2D surface in 3D)
+### [P0] B17 · Panel primitive (2D surface in 3D) ✓ Wave 2 (`ce760b6`)
 **Why:** [CONCEPT §1.2.1](CONCEPT.md); WS-12 horseshoe needs slot containers
 **What:** New `panel` primitive — rectangular plane (~3:2 aspect, resizable) that hosts widgets. Schema: `{ id, kind, position, size, widget: { kind, spec } }`
 **Files:**
@@ -331,7 +363,7 @@
 **Phase:** E1
 **AR-readiness:** + (rendered as texture on plane)
 
-### [P0] B21 · Alarm taxonomy (4-tier + visual + audio)
+### [P0] B21 · Alarm taxonomy (4-tier + visual + audio) ↻ Wave 5 (`8b934d1`) — visual + tag landed; audio chirps deferred to E3 spatial-audio milestone
 **Why:** WS-12 alarm patterns; ICU + cockpit literature
 **What:** Add `severity: 'info' | 'warning' | 'critical' | 'blocker'` to Notification. Visual: color + rim animation. Audio: distinct chirp per tier (deferred to E3 for full AR)
 **Files:**
@@ -432,7 +464,7 @@
 
 Цель: разобрать DOM-зависимости. См. [AR-VR-BRIDGE.md M2-M3](AR-VR-BRIDGE.md).
 
-### [P0] B28 · Replace `<Html>` with `<Text>` (troika-three-text)
+### [P0] B28 · Replace `<Html>` with `<Text>` (troika-three-text) ↻ Wave 1 (`d58c83d`) — Label.tsx primitive + cluster label migrated; 3 remaining interactive Html overlays in Artifact.tsx/Edge.tsx await R3F mesh-button design
 **Why:** [AR-VR-BRIDGE M2](AR-VR-BRIDGE.md#m2); existing v1 ROADMAP "Bundled font for drei `<Text>`"
 **What:** Replace the 4 `<Html>` instances in `Artifact.tsx:218, 317` and `Edge.tsx:196, 242` with mesh-based text via `troika-three-text`. Bundle Inter `.woff2`
 **Files:**
