@@ -1,4 +1,4 @@
-import type { ArtifactKind, EdgeKind, ArtifactSpec, Vec3 } from './types';
+import type { ArtifactKind, EdgeKind, ArtifactSpec, Vec3, PanelWidgetKind, AnchorMode } from './types';
 
 export interface SeedArtifact {
   shortName: string;
@@ -436,6 +436,87 @@ export function track(event: keyof typeof EVENTS, props: Record<string, unknown>
     tags: ['product', 'metrics'],
     position: { x: 7, y: -5.5, z: 0 },
     spec: { summary: 'Event taxonomy: 8 events, activation = first_deploy_succeeded', tags: ['analytics'], refs: ['Metrics'], tokens: 80 }
+  }
+];
+
+/**
+ * Demo panels — Wave 7 makes them visually meaningful so the marketing-demo
+ * board shows real widget content on first open (chart + flow + timeline +
+ * graph-3D), not empty placeholders. Each `widget.spec.links?[i]` maps a
+ * data-point index back to an artifact shortName for drill-down (B25).
+ */
+export interface SeedPanel {
+  title: string;
+  position: Vec3;
+  size?: { w: number; h: number };
+  widget: { kind: PanelWidgetKind; spec: Record<string, unknown> };
+  anchor?: AnchorMode;
+}
+
+export const MARKETING_PANELS: SeedPanel[] = [
+  {
+    title: 'Trial signups · last 12 weeks',
+    position: { x: -10, y: 6.5, z: 0 },
+    size: { w: 4.5, h: 3.0 },
+    widget: {
+      kind: 'chart',
+      spec: {
+        kind: 'line',
+        label: 'New trials per week',
+        x: ['w1','w2','w3','w4','w5','w6','w7','w8','w9','w10','w11','w12'],
+        y: [42, 51, 48, 63, 71, 88, 95, 112, 124, 140, 152, 178],
+        links: ['Metrics','Metrics','Metrics','Metrics','Metrics','Metrics','Metrics','Metrics','Metrics','Metrics','Metrics','Metrics']
+      }
+    }
+  },
+  {
+    title: 'Channels — spend split',
+    position: { x: -4.5, y: 6.5, z: 0 },
+    size: { w: 4.0, h: 3.0 },
+    widget: {
+      kind: 'chart',
+      spec: {
+        kind: 'bar',
+        label: 'USD/mo by channel',
+        x: ['Content', 'SEO', 'Ads', 'Devrel', 'Events'],
+        y: [3200, 1800, 2400, 1500, 900],
+        color: '#82A2FF',
+        links: ['Content','Content','Channels','Channels','Channels']
+      }
+    }
+  },
+  {
+    title: 'Activation funnel',
+    position: { x: 0.5, y: 6.5, z: 0 },
+    size: { w: 4.0, h: 3.0 },
+    widget: {
+      kind: 'flow',
+      spec: {
+        kind: 'plantuml',
+        source: '@startuml\nskinparam backgroundColor #11131A\nskinparam ActivityBackgroundColor #1A1D24\nskinparam ActivityBorderColor #5EEAD4\nskinparam ActivityFontColor #E8EAED\nskinparam ArrowColor #5EEAD4\nstart\n:Sign up;\n:Create project;\n:First deploy;\nif (succeeded?) then (yes)\n  :ACTIVATED;\nelse (no)\n  :Drop-off;\nendif\n@enduml',
+        links: ['Onboarding']
+      }
+    }
+  },
+  {
+    title: 'Release timeline',
+    position: { x: 5.5, y: 6.5, z: 0 },
+    size: { w: 5.5, h: 2.8 },
+    widget: {
+      kind: 'timeline',
+      spec: {
+        title: 'Strategy milestones',
+        events: [
+          { ts: Date.now() - 90 * 24 * 3600_000, label: 'Kickoff',    kind: 'ship',     link: 'Mission' },
+          { ts: Date.now() - 70 * 24 * 3600_000, label: 'Persona v1', kind: 'insight',  link: 'Persona' },
+          { ts: Date.now() - 50 * 24 * 3600_000, label: 'Positioning',kind: 'ship',     link: 'Positioning' },
+          { ts: Date.now() - 30 * 24 * 3600_000, label: 'Pricing',    kind: 'ship',     link: 'Pricing' },
+          { ts: Date.now() - 18 * 24 * 3600_000, label: 'GTM plan',   kind: 'ship',     link: 'GTMPlan' },
+          { ts: Date.now() -  7 * 24 * 3600_000, label: 'Launch post',kind: 'meeting',  link: 'LaunchPost' },
+          { ts: Date.now()                     , label: 'Today',      kind: 'insight' }
+        ]
+      }
+    }
   }
 ];
 

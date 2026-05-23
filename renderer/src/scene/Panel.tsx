@@ -16,6 +16,7 @@ import { useFrame } from '@react-three/fiber';
 import { MeshStandardMaterial, PlaneGeometry, EdgesGeometry, LineBasicMaterial, Group } from 'three';
 import type { Panel as PanelData } from '@shared/types';
 import { Label } from './text/Label';
+import { WidgetDispatcher } from './widgets';
 
 interface Props {
   panel: PanelData;
@@ -72,11 +73,14 @@ export function PanelObject({ panel, selected = false, dimmed = false }: Props) 
   });
 
   // Title bar: positioned at the top inner edge.
+  const TITLE_BAR = 0.32;
   const titleY = panel.size.h / 2 - 0.14;
   const widgetKind = panel.widget.kind;
-  const placeholderText = widgetKind === 'empty'
-    ? '(empty panel — attach_widget to populate)'
-    : `${widgetKind} widget · renderer arrives in a later card`;
+  const innerW = panel.size.w - 0.2;
+  const innerH = panel.size.h - TITLE_BAR;
+  // Widget origin: shifted down by half the title-bar so the content area
+  // sits beneath the title without overlapping it.
+  const widgetCenterY = -TITLE_BAR / 2;
 
   return (
     <group ref={groupRef}>
@@ -93,17 +97,23 @@ export function PanelObject({ panel, selected = false, dimmed = false }: Props) 
       >
         {panel.title}
       </Label>
-      <Label
-        position={[0, 0, 0.01]}
-        anchorX="center"
-        anchorY="middle"
-        fontSize={0.12}
-        color="#6B7280"
-        outlineWidth={0.008}
-        renderOrder={11}
-      >
-        {placeholderText}
-      </Label>
+      {widgetKind === 'empty' ? (
+        <Label
+          position={[0, 0, 0.01]}
+          anchorX="center"
+          anchorY="middle"
+          fontSize={0.12}
+          color="#6B7280"
+          outlineWidth={0.008}
+          renderOrder={11}
+        >
+          (empty panel — attach_widget to populate)
+        </Label>
+      ) : (
+        <group position={[0, widgetCenterY, 0]}>
+          <WidgetDispatcher panel={panel} innerW={innerW} innerH={innerH} />
+        </group>
+      )}
     </group>
   );
 }

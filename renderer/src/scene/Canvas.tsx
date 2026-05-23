@@ -8,6 +8,8 @@ import { PanelObject } from './Panel';
 import { FrameObject } from './Frame';
 import { AgentAuras } from './AgentAura';
 import { IntentGhosts } from './IntentGhost';
+import { WorkerSpinners } from './WorkerSpinner';
+import { ToolCallTrails } from './ToolCallTrail';
 import { OrbitCameraController } from './camera/OrbitCameraController';
 import { MultiAnchorCameraController } from './camera/MultiAnchorCameraController';
 import type { CameraController } from './camera/CameraController';
@@ -301,6 +303,8 @@ export function Canvas() {
 
       <AgentAuras />
       <IntentGhosts />
+      <WorkerSpinners />
+      <ToolCallTrails />
 
       {viewMode === 'console'
         ? <MultiAnchorCameraController />

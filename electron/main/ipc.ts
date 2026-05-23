@@ -24,7 +24,8 @@ import { bus } from './event-bus';
 
 export const DEBUG_CREATE_MOCK = 'cmd:debug-create-mock';
 
-import { MARKETING_ARTIFACTS, MARKETING_EDGES } from '../../shared/seed-marketing';
+import { MARKETING_ARTIFACTS, MARKETING_EDGES, MARKETING_PANELS } from '../../shared/seed-marketing';
+import type { Panel, AnchorMode } from '../../shared/types';
 
 export async function seedMarketingBoard(world: WorldState): Promise<void> {
   for (const item of MARKETING_ARTIFACTS) {
@@ -64,7 +65,24 @@ export async function seedMarketingBoard(world: WorldState): Promise<void> {
     await world.upsertEdge(edge);
     bus.emit('world', { type: 'edge.upserted', edge });
   }
-  console.log(`[seed] marketing board: ${MARKETING_ARTIFACTS.length} artifacts, ${MARKETING_EDGES.length} edges`);
+  for (const sp of MARKETING_PANELS) {
+    const now = Date.now();
+    const panel: Panel = {
+      id: nanoid(10),
+      boardId: world.getActiveBoardId(),
+      title: sp.title,
+      position: sp.position,
+      size: sp.size ?? { w: 3.0, h: 2.0 },
+      widget: { kind: sp.widget.kind, spec: sp.widget.spec },
+      anchor: (sp.anchor ?? 'world') as AnchorMode,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'seed'
+    };
+    await world.upsertPanel(panel);
+    bus.emit('world', { type: 'panel.upserted', panel });
+  }
+  console.log(`[seed] marketing board: ${MARKETING_ARTIFACTS.length} artifacts, ${MARKETING_EDGES.length} edges, ${MARKETING_PANELS.length} panels`);
 }
 
 function mimeToExt(mime: string, filename: string): string {

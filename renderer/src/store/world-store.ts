@@ -18,6 +18,32 @@ export interface AuraFlash {
   expiresAt: number;
 }
 
+/**
+ * B12 — Worker spawn placeholder (the "thinking…" spinner that shows up
+ * within ms of the user pressing Enter). Cleared when the action finishes.
+ */
+export interface WorkerSpinner {
+  actionId: string;
+  prompt: string;
+  position: Vec3;
+  startedAt: number;
+}
+
+/**
+ * B14 — Tool-call trail. Each entry is a fading line from `from` to `to`
+ * showing where an agent just mutated. Entries expire after ~2.5s and are
+ * pruned on every tick.
+ */
+export interface ToolTrail {
+  id: string;
+  agentRole: AgentRole;
+  toolName: string;
+  from: Vec3;
+  to: Vec3;
+  startedAt: number;
+  expiresAt: number;
+}
+
 export type CameraMode = 'orbit' | 'top-down';
 /**
  * B16 — view mode. `canvas` is the existing free-form orbit mode for
@@ -39,6 +65,10 @@ interface WorldStore {
   panels: Map<string, Panel>;
   /** B09 — per-artifact aura flashes, mutable map updated on every aura.flash event. */
   auraFlashes: Map<string, AuraFlash[]>;
+  /** B12 — active Worker spinners. */
+  workerSpinners: Map<string, WorkerSpinner>;
+  /** B14 — active tool-call trails (pruned on tick). */
+  toolTrails: ToolTrail[];
   /** B04 — pending layout plans (intent-ghosts). */
   pendingPlans: Map<string, PendingLayoutPlan>;
   /**
@@ -138,6 +168,8 @@ export const useWorldStore = create<WorldStore>(set => ({
   edges: new Map(),
   panels: new Map(),
   auraFlashes: new Map(),
+  workerSpinners: new Map(),
+  toolTrails: [],
   pendingPlans: new Map(),
   linkTypes: BUILTIN_LINK_TYPES,
   actions: new Map(),
@@ -209,6 +241,8 @@ export const useWorldStore = create<WorldStore>(set => ({
     const edges = new Map(state.edges);
     const panels = new Map(state.panels);
     const auraFlashes = new Map(state.auraFlashes);
+    const workerSpinners = new Map(state.workerSpinners);
+    let toolTrails = state.toolTrails;
     const pendingPlans = new Map(state.pendingPlans);
     const actions = new Map(state.actions);
     const targets = new Map(state.targetPositions);
@@ -280,6 +314,44 @@ export const useWorldStore = create<WorldStore>(set => ({
           auraFlashes.set(e.artifactId, prev);
           break;
         }
+        case 'worker.spawned':
+          workerSpinners.set(e.actionId, {
+            actionId: e.actionId,
+            prompt: e.prompt,
+            position: e.position,
+            startedAt: Date.now()
+          });
+          break;
+        case 'tool.trail': {
+          // Resolve target position from current state (fall back to spinner).
+          let to: Vec3 | undefined;
+          if (e.targetKind === 'artifact') to = artifacts.get(e.targetId)?.position;
+          else if (e.targetKind === 'panel') to = panels.get(e.targetId)?.position;
+          else if (e.targetKind === 'edge') {
+            const ed = edges.get(e.targetId);
+            const a = ed && artifacts.get(ed.src);
+            const b = ed && artifacts.get(ed.dst);
+            if (a?.position && b?.position) {
+              to = { x: (a.position.x + b.position.x) / 2, y: (a.position.y + b.position.y) / 2, z: (a.position.z + b.position.z) / 2 };
+            }
+          }
+          if (!to) break;
+          // From = most recent same-action trail end, or active spinner pos, or canvas origin.
+          const prior = [...toolTrails].reverse().find(t => t.id.startsWith(e.actionId));
+          const spinnerSrc = workerSpinners.get(e.actionId);
+          const from: Vec3 = prior?.to ?? spinnerSrc?.position ?? { x: 0, y: 2, z: 0 };
+          const now2 = Date.now();
+          toolTrails = [...toolTrails.filter(t => t.expiresAt > now2), {
+            id: `${e.actionId}:${e.ts}`,
+            agentRole: e.agentRole,
+            toolName: e.toolName,
+            from,
+            to,
+            startedAt: now2,
+            expiresAt: now2 + 2500
+          }].slice(-30);
+          break;
+        }
         case 'plan.proposed':
           pendingPlans.set(e.plan.id, e.plan);
           break;
@@ -289,6 +361,10 @@ export const useWorldStore = create<WorldStore>(set => ({
           break;
         case 'action.status':
           actions.set(e.action.id, e.action);
+          // B12 — clear Worker spinner when the action finishes.
+          if (e.action.status === 'done' || e.action.status === 'error' || e.action.status === 'cancelled') {
+            workerSpinners.delete(e.action.id);
+          }
           break;
         case 'listening.status':
           listeningStatus = e.status;
@@ -335,7 +411,7 @@ export const useWorldStore = create<WorldStore>(set => ({
       }
     }
     return {
-      artifacts, edges, panels, auraFlashes, pendingPlans, linkTypes, actions, targetPositions: targets,
+      artifacts, edges, panels, auraFlashes, workerSpinners, toolTrails, pendingPlans, linkTypes, actions, targetPositions: targets,
       boards, bookmarks, notifications, undoCount, redoCount, layoutHistoryCount,
       modelSettings, listeningStatus, utterancePreview, activeBoardId,
       selectedEdgeId
