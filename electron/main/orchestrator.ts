@@ -2,6 +2,7 @@ import type { WorldState } from './world-state';
 import { spawnWorker, type WorkerHandle } from './agents/worker';
 import { LayoutAgent } from './agents/layout';
 import { ListeningAgent } from './agents/listening';
+import { NamingAgent, looksGeneric } from './agents/naming';
 import { KeyboardSource } from './transcript/keyboard-source';
 import { UndoLog } from './undo-log';
 import { bus } from './event-bus';
@@ -26,6 +27,10 @@ export class Orchestrator {
   private maxConcurrent = 4;
   private layout: LayoutAgent;
   private listening: ListeningAgent;
+  /** B15 — fires a one-shot Haiku rename when an artifact lands with a generic shortName. */
+  private naming: NamingAgent;
+  /** Pending naming jobs (artifactId → debounced timer) to coalesce rapid mutations. */
+  private namingPending = new Set<string>();
   private keyboardSource: KeyboardSource;
   private routeKeyboardThroughListening = false;
   private cameraFocus: { target: Vec3; eye: Vec3 } = {
@@ -51,10 +56,34 @@ export class Orchestrator {
       }
     }, () => world.getModel('listening'));
     this.keyboardSource = new KeyboardSource(this.world.getSession().id);
+    this.naming = new NamingAgent(world);
 
     bus.on('world', e => {
-      if (e.type === 'artifact.upserted') this.layout.notifyUpsert(e.artifact);
-      else if (e.type === 'artifact.removed') this.layout.notifyRemove(e.id);
+      if (e.type === 'artifact.upserted') {
+        this.layout.notifyUpsert(e.artifact);
+        // B15 — schedule a rename pass if the new shortName looks generic.
+        // Cluster + frame are user/agent-intentional groupings; never rename
+        // them. Streaming-state artifacts haven't settled yet, also skip.
+        if (
+          e.artifact.kind !== 'cluster' &&
+          e.artifact.kind !== 'frame' &&
+          e.artifact.state === 'ready' &&
+          looksGeneric(e.artifact.shortName) &&
+          !this.namingPending.has(e.artifact.id)
+        ) {
+          this.namingPending.add(e.artifact.id);
+          // 800ms debounce — typical Worker write-once-then-update cycle
+          // takes about that long; we want to fire after the LAST update,
+          // not on every keystroke.
+          setTimeout(() => {
+            this.namingPending.delete(e.artifact.id);
+            void this.naming.tryRename(e.artifact.id);
+          }, 800);
+        }
+      } else if (e.type === 'artifact.removed') {
+        this.layout.notifyRemove(e.id);
+        this.namingPending.delete(e.id);
+      }
     });
   }
 
