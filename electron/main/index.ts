@@ -83,6 +83,14 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       await seedMarketingBoard(world);
     }, 1200);
+  } else if (process.env['JARVIS_SEED_MOCKS'] === '1' && world.getAllPanels().length === 0) {
+    // Wave 7+8 — DB already has artifacts from a pre-panel seed, but the new
+    // demo panels are missing. Seed panels only so existing users see the
+    // chart/flow/timeline content without losing their hand-arranged artifacts.
+    setTimeout(async () => {
+      const { seedDemoPanelsOnly } = await import('./ipc');
+      await seedDemoPanelsOnly(world);
+    }, 1200);
   }
 
   // Check for updates 4s after launch so the network call doesn't compete with

@@ -85,6 +85,33 @@ export async function seedMarketingBoard(world: WorldState): Promise<void> {
   console.log(`[seed] marketing board: ${MARKETING_ARTIFACTS.length} artifacts, ${MARKETING_EDGES.length} edges, ${MARKETING_PANELS.length} panels`);
 }
 
+/**
+ * Seed only the demo panels — used when an existing user's DB already has
+ * artifacts from a pre-Wave-7 seed but no panels. Avoids forcing them to
+ * wipe their DB just to see the new chart/flow/timeline widgets.
+ */
+export async function seedDemoPanelsOnly(world: WorldState): Promise<void> {
+  if (world.getAllPanels().length > 0) return;
+  for (const sp of MARKETING_PANELS) {
+    const now = Date.now();
+    const panel: Panel = {
+      id: nanoid(10),
+      boardId: world.getActiveBoardId(),
+      title: sp.title,
+      position: sp.position,
+      size: sp.size ?? { w: 3.0, h: 2.0 },
+      widget: { kind: sp.widget.kind, spec: sp.widget.spec },
+      anchor: (sp.anchor ?? 'world') as AnchorMode,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: 'seed'
+    };
+    await world.upsertPanel(panel);
+    bus.emit('world', { type: 'panel.upserted', panel });
+  }
+  console.log(`[seed] demo panels backfill: ${MARKETING_PANELS.length} panels`);
+}
+
 function mimeToExt(mime: string, filename: string): string {
   const fromName = path.extname(filename);
   if (fromName) return fromName;
