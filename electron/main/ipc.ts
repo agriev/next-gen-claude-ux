@@ -596,6 +596,27 @@ export function registerIpc(
     return orchestrator.restorePreviousLayout();
   });
 
+  // B18 — deterministic horseshoe arrangement of all panels on the active
+  // board. No LLM round-trip; the placement is rules-based (per WS-12
+  // dashboard slot grouping). Fired when the user toggles to Console mode
+  // so panels snap into the P/W1/W2/A1/A2 slots immediately.
+  ipcMain.handle(IPC.cmd.arrangeConsole, async () => {
+    const { computeHorseshoePlacements } = await import('./layout/horseshoe');
+    const panels = world.getAllPanels();
+    const placements = computeHorseshoePlacements(panels);
+    for (const p of placements) {
+      const existing = world.getPanel(p.id);
+      if (!existing) continue;
+      await world.upsertPanel({ ...existing, position: p.position, updatedAt: Date.now() });
+      bus.emit('world', { type: 'panel.upserted', panel: { ...existing, position: p.position, updatedAt: Date.now() } });
+    }
+    bus.emit('world', {
+      type: 'toast', level: 'info',
+      message: `Console mode · ${placements.length} panel${placements.length === 1 ? '' : 's'} arranged in horseshoe`
+    });
+    return { placed: placements.length };
+  });
+
   ipcMain.handle(IPC.cmd.setModel, async (_e, payload: { role: 'worker' | 'layout' | 'listening' | 'naming'; model: string }) => {
     await orchestrator.setModel(payload.role, payload.model);
     return { ok: true, settings: world.getModelSettings() };

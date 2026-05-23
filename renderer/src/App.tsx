@@ -22,6 +22,8 @@ import { ModelPicker } from './ui/ModelPicker';
 import { AgentActivityHud } from './ui/AgentActivityHud';
 import { LayoutActivityPanel } from './ui/LayoutActivityPanel';
 import { MarkingMenu } from './ui/MarkingMenu';
+import { Lasso } from './ui/Lasso';
+import { TimeScrubber } from './ui/TimeScrubber';
 
 export function App() {
   useIpcBridge();
@@ -49,6 +51,8 @@ export function App() {
       <DropPaste />
       <Onboarding />
       <MarkingMenu />
+      <Lasso />
+      <TimeScrubber />
       <Hotkeys />
     </div>
   );

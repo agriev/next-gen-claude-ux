@@ -154,6 +154,18 @@ interface WorldStore {
 
   requestFrameAll: () => void;
   markAutoFramed: () => void;
+
+  /**
+   * B24 — Camera fly-in target. When set, CameraFitter tweens the
+   * orbit-target + eye position into a tight focus on the artifact (and
+   * its children if it's a cluster), pushing the previous camera state
+   * onto `cameraBreadcrumb` so Esc can pop back.
+   */
+  diveTargetAt: { id: string; ts: number } | null;
+  cameraBreadcrumb: { target: Vec3; eye: Vec3 }[];
+  diveTo: (id: string) => void;
+  popBreadcrumb: () => void;
+  pushCameraBreadcrumb: (target: Vec3, eye: Vec3) => void;
 }
 
 const DEFAULT_FILTERS: FilterState = {
@@ -450,5 +462,17 @@ export const useWorldStore = create<WorldStore>(set => ({
   setOnboardingDismissed: () => set({ onboardingDismissed: true }),
   jumpBookmark: slot => set({ jumpToBookmarkAt: { slot, ts: Date.now() } }),
   requestFrameAll: () => set({ frameAllAt: Date.now() }),
-  markAutoFramed: () => set({ autoFramedOnce: true })
+  markAutoFramed: () => set({ autoFramedOnce: true }),
+
+  diveTargetAt: null,
+  cameraBreadcrumb: [],
+  diveTo: id => set({ diveTargetAt: { id, ts: Date.now() } }),
+  popBreadcrumb: () => set(state => {
+    if (state.cameraBreadcrumb.length === 0) return state;
+    const next = state.cameraBreadcrumb.slice(0, -1);
+    return { cameraBreadcrumb: next, diveTargetAt: { id: '__pop__', ts: Date.now() } };
+  }),
+  pushCameraBreadcrumb: (target, eye) => set(state => ({
+    cameraBreadcrumb: [...state.cameraBreadcrumb, { target, eye }].slice(-12)
+  }))
 }));

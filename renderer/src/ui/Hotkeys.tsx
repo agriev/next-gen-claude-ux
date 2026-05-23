@@ -48,10 +48,25 @@ export function Hotkeys() {
         return;
       }
       // B16 — Tab toggles canvas ↔ console view mode.
+      // B18 — when entering console, also fire deterministic horseshoe arrange.
       if (!inEditable && e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
+        const prevMode = useWorldStore.getState().viewMode;
         useWorldStore.getState().toggleViewMode();
+        if (prevMode === 'canvas') {
+          // Going into Console mode: snap panels into the 5-slot horseshoe.
+          void window.api.arrangeConsole();
+        }
         return;
+      }
+      // B24 — Escape pops the camera breadcrumb (back out of a dive-in).
+      if (!inEditable && e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const stack = useWorldStore.getState().cameraBreadcrumb;
+        if (stack.length > 0) {
+          e.preventDefault();
+          useWorldStore.getState().popBreadcrumb();
+          return;
+        }
       }
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && !inEditable) {
         // Cmd+F search (lowercase f when not editable; uppercase 'F' alone is frame all)

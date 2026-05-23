@@ -10,6 +10,7 @@ import { AgentAuras } from './AgentAura';
 import { IntentGhosts } from './IntentGhost';
 import { WorkerSpinners } from './WorkerSpinner';
 import { ToolCallTrails } from './ToolCallTrail';
+import { ReasoningThreads } from './ReasoningThread';
 import { OrbitCameraController } from './camera/OrbitCameraController';
 import { MultiAnchorCameraController } from './camera/MultiAnchorCameraController';
 import type { CameraController } from './camera/CameraController';
@@ -102,6 +103,97 @@ function CameraFitter() {
     fitAll();
   }, [cameraMode]);
 
+  // B24 — camera fly-in on dive request (double-click on a cluster).
+  const diveTargetAt = useWorldStore(s => s.diveTargetAt);
+  const cameraBreadcrumb = useWorldStore(s => s.cameraBreadcrumb);
+  const pushCameraBreadcrumb = useWorldStore(s => s.pushCameraBreadcrumb);
+  const camDiveRef = useRef<{
+    fromTarget: Vector3; toTarget: Vector3;
+    fromEye: Vector3; toEye: Vector3;
+    startedAt: number;
+  } | null>(null);
+  useEffect(() => {
+    if (!diveTargetAt || !controls) return;
+    let targetCenter: Vector3 | null = null;
+    let frameDist = 8;
+    if (diveTargetAt.id === '__pop__') {
+      const last = cameraBreadcrumb[cameraBreadcrumb.length - 1];
+      if (!last) return;
+      targetCenter = new Vector3(last.target.x, last.target.y, last.target.z);
+      const eye = new Vector3(last.eye.x, last.eye.y, last.eye.z);
+      camDiveRef.current = {
+        fromTarget: controls.target.clone(),
+        toTarget: targetCenter,
+        fromEye: (camera.position as unknown as Vector3).clone(),
+        toEye: eye,
+        startedAt: performance.now()
+      };
+      return;
+    }
+    const a = artifacts.get(diveTargetAt.id);
+    if (!a) return;
+    // Compute bbox: cluster → resolve spec.refs to children; otherwise just the artifact.
+    const memberIds = (a.spec?.refs ?? []) as string[];
+    const pts: Vector3[] = [];
+    const center = targets.get(a.id) ?? a.position;
+    if (center) pts.push(new Vector3(center.x, center.y, center.z));
+    for (const ref of memberIds) {
+      // refs may be ids or shortNames
+      let child = artifacts.get(ref);
+      if (!child) {
+        for (const v of artifacts.values()) if (v.shortName === ref) { child = v; break; }
+      }
+      if (!child) continue;
+      const cp = targets.get(child.id) ?? child.position;
+      if (cp) pts.push(new Vector3(cp.x, cp.y, cp.z));
+    }
+    if (pts.length === 0) return;
+    const box = new Box3();
+    for (const p of pts) box.expandByPoint(p);
+    box.expandByScalar(1.5);
+    const newCenter = box.getCenter(new Vector3());
+    const size = box.getSize(new Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fovRad = ((camera.fov ?? 50) * Math.PI) / 180;
+    frameDist = Math.max(4, maxDim / (2 * Math.tan(fovRad / 2)) * 1.05);
+    targetCenter = newCenter;
+    // Save current camera state to breadcrumb stack.
+    pushCameraBreadcrumb(
+      { x: controls.target.x, y: controls.target.y, z: controls.target.z },
+      { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+    );
+    const dir = new Vector3(0.1, 0.25, 1).normalize();
+    const newEye = new Vector3().copy(newCenter).addScaledVector(dir, frameDist);
+    camDiveRef.current = {
+      fromTarget: controls.target.clone(),
+      toTarget: targetCenter,
+      fromEye: (camera.position as unknown as Vector3).clone(),
+      toEye: newEye,
+      startedAt: performance.now()
+    };
+  }, [diveTargetAt?.ts, controls]);
+
+  useFrame(() => {
+    const dive = camDiveRef.current;
+    if (!dive || !controls) return;
+    const elapsed = performance.now() - dive.startedAt;
+    const DURATION = 600;
+    if (elapsed >= DURATION) {
+      controls.target.copy(dive.toTarget);
+      camera.position.copy(dive.toEye);
+      camera.updateProjectionMatrix();
+      controls.update();
+      camDiveRef.current = null;
+      return;
+    }
+    const t = elapsed / DURATION;
+    const eased = 1 - Math.pow(1 - t, 3);
+    controls.target.lerpVectors(dive.fromTarget, dive.toTarget, eased);
+    (camera.position as unknown as Vector3).lerpVectors(dive.fromEye, dive.toEye, eased);
+    camera.updateProjectionMatrix();
+    controls.update();
+  });
+
   // B07 — pivot-to-selection. When the selection changes (and we're not in
   // the middle of a multi-frame fit), smoothly tween `controls.target` to the
   // pivot point. Uses computePivot() for the policy; null result = no change.
@@ -143,6 +235,7 @@ function CameraFitter() {
 function CameraFocusReporter() {
   const camera = useThree(s => s.camera);
   const controls = useThree(s => s.controls) as CameraController | null;
+  const size = useThree(s => s.size);
 
   useFrame(() => {
     if (!controls) return;
@@ -156,6 +249,14 @@ function CameraFocusReporter() {
       { x: tgt.x, y: tgt.y, z: tgt.z },
       { x: eye.x, y: eye.y, z: eye.z }
     );
+    // B27 — expose camera + viewport size so the Lasso DOM overlay can
+    // project world → screen on mouseup. Keeps Lasso out of R3F (DOM
+    // events on the overlay are easier to manage there).
+    window.__jarvis_camera = {
+      camera: camera as unknown as { project: (v: Vector3) => Vector3 },
+      width: size.width,
+      height: size.height
+    };
   });
 
   return null;
@@ -305,6 +406,7 @@ export function Canvas() {
       <IntentGhosts />
       <WorkerSpinners />
       <ToolCallTrails />
+      <ReasoningThreads />
 
       {viewMode === 'console'
         ? <MultiAnchorCameraController />

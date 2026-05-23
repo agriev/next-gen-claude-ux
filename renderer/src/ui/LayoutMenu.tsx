@@ -8,11 +8,12 @@ interface Mode {
 }
 
 const MODES: Mode[] = [
-  { key: 'by-type',   label: 'by type',    hint: 'group doc/code/note/log' },
-  { key: 'by-tags',   label: 'by tags',    hint: 'cluster per tag' },
-  { key: 'by-topic',  label: 'by topic',   hint: 'agent infers themes' },
-  { key: 'by-time',   label: 'by time',    hint: 'left → right chronological' },
-  { key: 'free-form', label: 'custom…',    hint: 'describe your grouping' }
+  { key: 'by-type',        label: 'by type',          hint: 'group doc/code/note/log' },
+  { key: 'by-tags',        label: 'by tags',          hint: 'cluster per tag' },
+  { key: 'by-topic',       label: 'by topic',         hint: 'agent infers themes' },
+  { key: 'by-time',        label: 'by time',          hint: 'left → right chronological' },
+  { key: 'force-directed', label: 'force-directed',   hint: 'local · no LLM · ~100ms' },
+  { key: 'free-form',      label: 'custom…',          hint: 'describe your grouping' }
 ];
 
 export function LayoutMenu() {

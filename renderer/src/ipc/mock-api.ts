@@ -93,6 +93,7 @@ export function installMockApi(): void {
     setOnboardedFlag: async () => undefined,
     requestReorganize: async () => undefined,
     restoreLayout: async () => ({ ok: false }),
+    arrangeConsole: async () => ({ placed: 0 }),
     commitLayoutPlan: async () => ({ ok: false, summary: null }),
     rejectLayoutPlan: async () => ({ ok: false }),
     setModel: async () => ({ ok: true }),
