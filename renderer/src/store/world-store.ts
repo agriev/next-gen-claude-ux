@@ -19,6 +19,12 @@ export interface AuraFlash {
 }
 
 export type CameraMode = 'orbit' | 'top-down';
+/**
+ * B16 — view mode. `canvas` is the existing free-form orbit mode for
+ * exploration; `console` switches to a stationary multi-anchor view of
+ * panels arranged in a horseshoe (B18 lands the layout algorithm).
+ */
+export type ViewMode = 'canvas' | 'console';
 
 export interface FilterState {
   query: string;
@@ -69,6 +75,8 @@ interface WorldStore {
 
   // camera
   cameraMode: CameraMode;
+  /** B16 — view mode (canvas vs console). */
+  viewMode: ViewMode;
 
   // notifications
   notifications: Notification[];
@@ -108,6 +116,8 @@ interface WorldStore {
   setFilters: (f: Partial<FilterState>) => void;
   resetFilters: () => void;
   setCameraMode: (m: CameraMode) => void;
+  setViewMode: (m: ViewMode) => void;
+  toggleViewMode: () => void;
   setNotificationsOpen: (open: boolean) => void;
   setOnboardingDismissed: () => void;
   jumpBookmark: (slot: number) => void;
@@ -148,6 +158,7 @@ export const useWorldStore = create<WorldStore>(set => ({
   bookmarks: new Map(),
   jumpToBookmarkAt: null,
   cameraMode: 'orbit',
+  viewMode: 'canvas',
   notifications: [],
   notificationsOpen: false,
   undoCount: 0,
@@ -357,6 +368,8 @@ export const useWorldStore = create<WorldStore>(set => ({
   setFilters: f => set(state => ({ filters: { ...state.filters, ...f } })),
   resetFilters: () => set({ filters: { ...DEFAULT_FILTERS, kinds: new Set(), tags: new Set() } }),
   setCameraMode: m => set({ cameraMode: m }),
+  setViewMode: m => set({ viewMode: m }),
+  toggleViewMode: () => set(state => ({ viewMode: state.viewMode === 'canvas' ? 'console' : 'canvas' })),
   setNotificationsOpen: open => set({ notificationsOpen: open }),
   setOnboardingDismissed: () => set({ onboardingDismissed: true }),
   jumpBookmark: slot => set({ jumpToBookmarkAt: { slot, ts: Date.now() } }),

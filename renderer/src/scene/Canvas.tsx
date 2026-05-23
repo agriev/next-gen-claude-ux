@@ -9,6 +9,7 @@ import { FrameObject } from './Frame';
 import { AgentAuras } from './AgentAura';
 import { IntentGhosts } from './IntentGhost';
 import { OrbitCameraController } from './camera/OrbitCameraController';
+import { MultiAnchorCameraController } from './camera/MultiAnchorCameraController';
 import type { CameraController } from './camera/CameraController';
 import { computePivot } from './camera/pivotPolicy';
 import { computeRelatedIds } from '../store/related';
@@ -202,6 +203,7 @@ export function Canvas() {
   const filters = useWorldStore(s => s.filters);
   const focusedId = useWorldStore(s => s.focusedArtifactId);
   const cameraMode = useWorldStore(s => s.cameraMode);
+  const viewMode = useWorldStore(s => s.viewMode);
 
   const filtersActive = filters.kinds.size > 0 || filters.tags.size > 0 || filters.pinnedOnly || filters.query.length > 0;
   // B03 — when a single artifact is focused, "related" set keeps full opacity;
@@ -300,7 +302,9 @@ export function Canvas() {
       <AgentAuras />
       <IntentGhosts />
 
-      <OrbitCameraController />
+      {viewMode === 'console'
+        ? <MultiAnchorCameraController />
+        : <OrbitCameraController />}
       <CameraFitter />
       <CameraFocusReporter />
       <BookmarkCapture />

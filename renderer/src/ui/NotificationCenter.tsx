@@ -1,12 +1,18 @@
 import { useMemo } from 'react';
 import { useWorldStore } from '../store/world-store';
 import { DraggablePanel } from './DraggablePanel';
+import type { NotificationSeverity } from '@shared/types';
 
-const LEVEL_COLOR: Record<string, string> = {
-  info: '#5EEAD4',
-  success: '#5EEAD4',
-  warn: '#FBBF24',
-  error: '#FB7185'
+/**
+ * B21 — alarm taxonomy. Severity overrides level coloring + adds rim
+ * treatment. The 4-tier scale (info / warning / critical / blocker)
+ * matches ICU + cockpit literature (WS-12).
+ */
+const SEVERITY_RIM: Record<NotificationSeverity, { color: string; pulse: boolean; tag: string }> = {
+  info:     { color: '#5EEAD4', pulse: false, tag: '' },
+  warning:  { color: '#FBBF24', pulse: false, tag: 'WARN' },
+  critical: { color: '#FB7185', pulse: true,  tag: 'CRIT' },
+  blocker:  { color: '#FB7185', pulse: true,  tag: 'BLOCK' }
 };
 
 export function NotificationCenter() {
@@ -42,30 +48,45 @@ export function NotificationCenter() {
             no notifications yet
           </div>
         )}
-        {notifications.slice(0, 30).map(n => (
-          <div
-            key={n.id}
-            onClick={() => !n.readAt && window.api.markNotificationRead(n.id)}
-            style={{
-              padding: '8px 12px', borderBottom: '1px solid #1F2228',
-              cursor: !n.readAt ? 'pointer' : 'default',
-              background: !n.readAt ? 'rgba(94,234,212,0.04)' : 'transparent'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
-              <span style={{ width: 5, height: 5, borderRadius: '50%', background: LEVEL_COLOR[n.level] }} />
-              <span style={{ color: '#E8EAED', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {n.title}
-              </span>
-              <span style={{ color: '#5A5F68', fontFamily: 'JetBrains Mono, monospace' }}>
-                {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+        {notifications.slice(0, 30).map(n => {
+          const sev = (n.severity ?? 'info') as NotificationSeverity;
+          const rim = SEVERITY_RIM[sev];
+          const isAlarm = sev !== 'info';
+          return (
+            <div
+              key={n.id}
+              onClick={() => !n.readAt && window.api.markNotificationRead(n.id)}
+              style={{
+                padding: '8px 12px',
+                borderBottom: '1px solid #1F2228',
+                cursor: !n.readAt ? 'pointer' : 'default',
+                background: !n.readAt ? `${rim.color}10` : 'transparent',
+                borderLeft: isAlarm ? `3px solid ${rim.color}` : '3px solid transparent',
+                animation: rim.pulse && !n.readAt ? 'jarvis-pulse 1.4s ease-in-out infinite' : undefined
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
+                <span style={{ width: 5, height: 5, borderRadius: '50%', background: rim.color, boxShadow: rim.pulse ? `0 0 6px ${rim.color}` : undefined }} />
+                {rim.tag && (
+                  <span style={{
+                    fontSize: 8, fontFamily: 'JetBrains Mono, monospace',
+                    color: rim.color, padding: '1px 4px',
+                    border: `1px solid ${rim.color}55`, borderRadius: 3, letterSpacing: 0.5
+                  }}>{rim.tag}</span>
+                )}
+                <span style={{ color: '#E8EAED', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {n.title}
+                </span>
+                <span style={{ color: '#5A5F68', fontFamily: 'JetBrains Mono, monospace' }}>
+                  {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              {n.body && (
+                <div style={{ marginTop: 4, fontSize: 11, color: '#8A8F98', fontFamily: 'Inter, sans-serif' }}>{n.body}</div>
+              )}
             </div>
-            {n.body && (
-              <div style={{ marginTop: 4, fontSize: 11, color: '#8A8F98', fontFamily: 'Inter, sans-serif' }}>{n.body}</div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </DraggablePanel>
   );

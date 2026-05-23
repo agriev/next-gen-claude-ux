@@ -47,6 +47,12 @@ export function Hotkeys() {
         state.setCameraMode(state.cameraMode === 'orbit' ? 'top-down' : 'orbit');
         return;
       }
+      // B16 — Tab toggles canvas ↔ console view mode.
+      if (!inEditable && e.key === 'Tab' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        useWorldStore.getState().toggleViewMode();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && (e.key === 'f' || e.key === 'F') && !inEditable) {
         // Cmd+F search (lowercase f when not editable; uppercase 'F' alone is frame all)
       }

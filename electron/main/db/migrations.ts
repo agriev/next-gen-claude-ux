@@ -220,6 +220,14 @@ const MIGRATIONS: Migration[] = [
       );
       CREATE INDEX idx_panels_board ON panels(board_id);
     `
+  },
+  {
+    version: 7,
+    // B21 — alarm taxonomy. Adds severity to notifications. Default 'info'
+    // keeps existing notifications unchanged.
+    sql: `
+      ALTER TABLE notifications ADD COLUMN severity TEXT NOT NULL DEFAULT 'info';
+    `
   }
 ];
 

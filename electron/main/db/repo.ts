@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3';
 import type {
   Artifact, Edge, Action, Session, TranscriptChunk, Utterance, ArtifactSpec, Vec3,
   ArtifactKind, ArtifactState, ActionKind, ActionStatus, AgentRole, TranscriptSource,
-  Board, Bookmark, Notification, NotificationKind, NotificationLevel, Attachment,
+  Board, Bookmark, Notification, NotificationKind, NotificationLevel, NotificationSeverity, Attachment,
   LinkType, Panel, PanelWidget, PanelWidgetKind, AnchorMode
 } from '../../../shared/types';
 
@@ -46,7 +46,7 @@ interface BookmarkRow {
 }
 
 interface NotificationRow {
-  id: string; kind: string; level: string;
+  id: string; kind: string; level: string; severity: string;
   title: string; body: string | null; payload: string | null;
   created_at: number; read_at: number | null;
 }
@@ -182,6 +182,7 @@ function rowToNotification(r: NotificationRow): Notification {
   return {
     id: r.id, kind: r.kind as NotificationKind,
     level: r.level as NotificationLevel,
+    severity: (r.severity ?? 'info') as NotificationSeverity,
     title: r.title, body: r.body ?? undefined,
     payload: r.payload ? JSON.parse(r.payload) : undefined,
     createdAt: r.created_at,
@@ -440,10 +441,11 @@ export class Repo {
 
   insertNotification(n: Notification): void {
     this.db.prepare(`
-      INSERT INTO notifications (id, kind, level, title, body, payload, created_at, read_at)
-      VALUES (@id, @kind, @level, @title, @body, @payload, @createdAt, @readAt)
+      INSERT INTO notifications (id, kind, level, severity, title, body, payload, created_at, read_at)
+      VALUES (@id, @kind, @level, @severity, @title, @body, @payload, @createdAt, @readAt)
     `).run({
       id: n.id, kind: n.kind, level: n.level,
+      severity: n.severity ?? 'info',
       title: n.title, body: n.body ?? null,
       payload: n.payload ? JSON.stringify(n.payload) : null,
       createdAt: n.createdAt, readAt: n.readAt ?? null
