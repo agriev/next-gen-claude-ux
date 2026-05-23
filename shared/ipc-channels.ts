@@ -48,6 +48,12 @@ export const IPC = {
     // Layout reorganize
     requestReorganize: 'cmd:request-reorganize',
     restoreLayout: 'cmd:restore-layout',
+    /**
+     * B18 — deterministic console-mode horseshoe arrangement of panels.
+     * No LLM round-trip; runs on the main process and snaps panels into
+     * the 5-slot horseshoe (P / W1 / W2 / A1 / A2) + overflow row.
+     */
+    arrangeConsole: 'cmd:arrange-console',
 
     // Pending layout plans (B04 intent-ghost)
     commitLayoutPlan: 'cmd:commit-layout-plan',

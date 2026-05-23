@@ -217,7 +217,31 @@ export class Orchestrator {
       bus.emit('world', { type: 'artifact.removed', id: c.id });
     }
 
-    // 3. Send reorganize delta to layout agent
+    // 3. Send reorganize delta to layout agent.
+    // B08 — `force-directed` mode bypasses the LLM and runs a deterministic
+    // pure-JS Fruchterman-Reingold pass on the main process. Used as the
+    // "always works" baseline and as an automatic fallback when the Layout
+    // agent's circuit breaker is open (future B08.2).
+    if (mode === 'force-directed') {
+      const { computeForceDirected } = await import('./layout/force-directed');
+      const artifacts = this.world.getAllArtifacts();
+      const edges = this.world.getAllEdges();
+      const t0 = Date.now();
+      const placements = computeForceDirected(artifacts, edges);
+      const updates: Array<{ id: string; x: number; y: number; z: number }> = [];
+      for (const [id, pos] of placements) {
+        await this.world.setArtifactPosition(id, pos, false);
+        updates.push({ id, x: pos.x, y: pos.y, z: pos.z });
+      }
+      bus.emit('world', { type: 'layout.updated', positions: updates });
+      const elapsed = Date.now() - t0;
+      bus.emit('world', {
+        type: 'toast', level: 'info',
+        message: `Force-directed pass · ${placements.size} cards · ${elapsed}ms (no LLM)`
+      });
+      bus.emit('world', { type: 'layout.state', historyCount: this.layoutHistory.length });
+      return;
+    }
     this.layout.requestReorganize(mode, prompt);
 
     bus.emit('world', { type: 'layout.state', historyCount: this.layoutHistory.length });

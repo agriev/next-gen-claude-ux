@@ -64,6 +64,11 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
       producedIds.push(id);
       bus.emit('world', { type: 'artifact.upserted', artifact: a });
       flashAura(id);
+      bus.emit('world', {
+        type: 'tool.trail',
+        agentRole: 'worker', actionId, toolName: 'create_artifact',
+        targetId: id, targetKind: 'artifact', ts: now
+      });
       bus.emit('agentLog', { agentRole: 'worker', agentId, actionId, kind: 'tool', ts: now, text: `created ${shortName} (${args.kind})` });
       return {
         content: [{ type: 'text' as const, text: `created artifact id=${id} shortName=${shortName}` }]
@@ -97,6 +102,11 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
       await world.upsertArtifact(updated);
       bus.emit('world', { type: 'artifact.upserted', artifact: updated });
       flashAura(id);
+      bus.emit('world', {
+        type: 'tool.trail',
+        agentRole: 'worker', actionId, toolName: 'update_artifact',
+        targetId: id, targetKind: 'artifact', ts: Date.now()
+      });
       return { content: [{ type: 'text' as const, text: `updated ${id}` }] };
     }
   );

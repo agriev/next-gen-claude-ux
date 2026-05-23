@@ -24,6 +24,20 @@ export type WorldEvent =
   | { type: 'plan.proposed'; plan: PendingLayoutPlan }
   | { type: 'plan.committed'; id: string }
   | { type: 'plan.rejected'; id: string; reason: 'user' | 'timeout' | 'superseded' }
+  /**
+   * B12 — Worker streaming spinner. Emitted the moment the user kicks off a
+   * Worker so the scene shows a "thinking…" placeholder near `position`
+   * within milliseconds, before any tool calls execute. Renderer removes
+   * the spinner when the action transitions to done/error/cancelled.
+   */
+  | { type: 'worker.spawned'; actionId: string; prompt: string; position: { x: number; y: number; z: number } }
+  /**
+   * B14 — tool-call-trail. Emitted whenever an agent's tool call mutates an
+   * artifact / edge / panel. Renderer draws a fading dashed line from the
+   * agent's logical origin to the mutated target's position. Origin is
+   * usually the most recent mutation's position (or canvas center if first).
+   */
+  | { type: 'tool.trail'; agentRole: AgentRole; actionId: string; toolName: string; targetId: string; targetKind: 'artifact' | 'edge' | 'panel'; ts: number }
   | { type: 'action.status'; action: Action }
   | { type: 'transcript.chunk'; chunk: TranscriptChunk }
   | { type: 'listening.status'; status: ListeningStatus }

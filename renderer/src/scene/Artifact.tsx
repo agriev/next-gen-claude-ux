@@ -176,7 +176,13 @@ export function ArtifactObject({ artifact, targetPosition, selected, dimmed = fa
 
   const handleDoubleClick = (ev: ThreeEvent<MouseEvent>) => {
     ev.stopPropagation();
-    useWorldStore.getState().setInspectorArtifact(artifact.id);
+    // B24 — clusters dive-in on double-click (camera flies to fit cluster
+    // members). All other artifact kinds open Inspector as before.
+    if (artifact.kind === 'cluster') {
+      useWorldStore.getState().diveTo(artifact.id);
+    } else {
+      useWorldStore.getState().setInspectorArtifact(artifact.id);
+    }
   };
 
   const rim = STATE_RIM[artifact.state];

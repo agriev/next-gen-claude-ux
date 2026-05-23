@@ -86,6 +86,8 @@ const api = {
     ipcRenderer.invoke(IPC.cmd.requestReorganize, { mode, prompt }),
   restoreLayout: (): Promise<{ ok: boolean; ageMs?: number }> =>
     ipcRenderer.invoke(IPC.cmd.restoreLayout),
+  arrangeConsole: (): Promise<{ placed: number }> =>
+    ipcRenderer.invoke(IPC.cmd.arrangeConsole),
 
   // intent-ghost (B04)
   commitLayoutPlan: (id: string): Promise<{ ok: boolean; summary: string | null }> =>

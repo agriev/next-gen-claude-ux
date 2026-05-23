@@ -40,20 +40,18 @@
 | 3 — Agent representation | [#3](https://github.com/agriev/next-gen-claude-ux/pull/3) `689b0e5` | B04 ✓ · B09 ✓ | merged |
 | 4 — Interaction polish | [#4](https://github.com/agriev/next-gen-claude-ux/pull/4) `be35b36` | B03 ✓ · B07 ✓ · B11 ✓ | merged |
 | 5 — Console mode | [#5](https://github.com/agriev/next-gen-claude-ux/pull/5) `8b934d1` | B16 ✓ · B21 ✓ | merged |
-| 6 — Reliability | [#6](https://github.com/agriev/next-gen-claude-ux/pull/6) | B13 ✓ · B15 ✓ | in review |
+| 6 — Reliability | [#6](https://github.com/agriev/next-gen-claude-ux/pull/6) `0b40c44` | B13 ✓ · B15 ✓ | merged |
+| 7+8 — Widgets, streaming, console, polish | (pending PR — `wave-7-8-final`) | B06 ✓ · B08 ✓ · B12 ✓ · B14 ✓ · B18 ✓ · B19 ✓ · B20 ✓ · B22 ✓ · B23 ✓ · B24 ✓ · B25 ✓ · B26 ↻ · B27 ✓ | in review |
 
-**Cards landed: 15 / 28** (E0 + E1 scope). Each wave's PR body documents deferred sub-cards.
+**Cards landed: 28 / 28** of E0 + E1 scope. All Part II waves complete — every E0/E1 backlog card is now reflected in a landed PR (B26 lands as a scaffold; full scrub-playback is B26.2).
 
-**Deferred to bis-waves** (small, intentional descopes):
-- B06 (reasoning-thread 3-idiom prototype) → Wave 3-bis
-- B08 (force-directed fallback worker_thread) → Wave 3-bis (depends on B06 trace data)
-- B12 (streaming Worker output) → Wave 6-bis
-- B14 (tool-call-trail) → Wave 4-bis (depends on B06)
-- B18 (horseshoe layout algo) → Wave 5-bis
-- B27 (lasso select 3D) → Wave 5-bis
-
-**Not yet started** (E1 viz):
-- B19 (chart-panel widget), B20 (flow-panel widget), B22 (timeline-axis), B23 (volume + graph-3d), B24 (camera fly-in), B25 (drill-down), B26 (time-travel scrubber)
+**Sub-card descopes (intentional, tracked for follow-ups):**
+- B06 — ships the *vertical-thread* idiom only. Per-agent lane + tree-of-spans land as B06.2 behind `?trace_idiom=` URL flag.
+- B08 — manual mode in LayoutMenu landed; automatic circuit-breaker fallback wiring is B08.2.
+- B12 — Worker spinner + early visibility landed; true per-token streaming of artifact bodies (SDK delta events) is B12.2.
+- B20 — PlantUML rendering on panels landed; Mermaid path is stub-only until we bundle the mermaid lib (B20.2).
+- B23 — Graph-3D widget renders inside its own auto-volume; a standalone Volume primitive (separate from the widget) is B23.2.
+- B26 — visual scrubber bar with event histogram landed; snapshot replay (the actual time-travel) is B26.2.
 
 ---
 
@@ -151,7 +149,7 @@
 **Phase:** E0
 **AR-readiness:** neutral
 
-### [P0] B06 · Reasoning-thread primitive (MVP, 3 idioms)
+### [P0] B06 · Reasoning-thread primitive (MVP, 3 idioms) ↻ Wave 7+8 — vertical-thread shipped, lane/tree idioms B06.2
 **Why:** [TR6 tradeoffs](../research/synthesis/tradeoffs.md#tr6) — Jarvis non-default position; [WS-07 headline](../research/07-ai-native-reasoning.md) "Z-axis is Jarvis's claim"; [Q1.1 open-questions](../research/synthesis/open-questions.md)
 **What:** Prototype 3 visual idioms for reasoning trace: (a) vertical thread with nodes, (b) per-agent horizontal lane, (c) tree-of-spans. Behind a developer flag, switch between them. 30-min usage decides winner
 **Files:**
@@ -179,7 +177,7 @@
 **Phase:** E0
 **AR-readiness:** +
 
-### [P0] B08 · Force-directed layout fallback (worker_thread)
+### [P0] B08 · Force-directed layout fallback (worker_thread) ↻ Wave 7+8 — manual mode shipped; auto-on-breaker is B08.2
 **Why:** existing v1 ROADMAP ★; addresses [M1 meta open-question](../research/synthesis/open-questions.md) — LLM Layout fails past N artifacts
 **What:** When Layout agent times out or 429s, fall back to local force-directed simulation (springs along edges, repulsion, cluster attraction) in a worker_thread. LLM hints positions; heuristic settles
 **Files:**
@@ -233,7 +231,7 @@
 **Phase:** E0
 **AR-readiness:** + (translates to AR: hand-circle gesture)
 
-### [P1] B12 · Streaming Worker output (artifacts appear progressively)
+### [P1] B12 · Streaming Worker output (artifacts appear progressively) ↻ Wave 7+8 — spawn spinner shipped; per-token streaming B12.2
 **Why:** existing v1 ROADMAP ★; user perceived latency drops from seconds to ~200ms
 **What:** Render artifact with `state: 'streaming'` immediately when `create_artifact` begins; body fills progressively as text streams
 **Files:**
@@ -261,7 +259,7 @@
 **Phase:** E0
 **AR-readiness:** +
 
-### [P2] B14 · Tool-call-trail (skeleton breadcrumb)
+### [P2] B14 · Tool-call-trail (skeleton breadcrumb) ✓ Wave 7+8
 **Why:** [CONCEPT §1.2.7](CONCEPT.md); [WS-11 named-trails revival](../research/11-novel-historical.md)
 **What:** Lighter-weight cousin of reasoning-thread — chain of beads through scene, each bead = one tool call. Auto-created for actions with ≥3 tool calls; user can explicit save to Trail collection
 **Files:**
@@ -322,7 +320,7 @@
 **Phase:** E1
 **AR-readiness:** + (R3F-native plane)
 
-### [P0] B18 · Horseshoe layout (Layout agent mode)
+### [P0] B18 · Horseshoe layout (Layout agent mode) ✓ Wave 7+8 — deterministic, no LLM
 **Why:** WS-12 horseshoe — 5-slot pattern (P/W1/W2/A1/A2)
 **What:** Add new mode to Layout agent: `console` — places top-priority artifacts/panels in fixed horseshoe slots based on `attention_rank` field on each artifact/panel
 **Files:**
@@ -336,7 +334,7 @@
 **Phase:** E1
 **AR-readiness:** +
 
-### [P0] B19 · Chart-panel (line / bar / heatmap widget)
+### [P0] B19 · Chart-panel (line / bar / heatmap widget) ✓ Wave 7+8
 **Why:** [CONCEPT §2.1](CONCEPT.md); WS-03 BI patterns
 **What:** Implement chart widget for `panel`. Initial 3 chart types: line, bar, heatmap. D3 (lightweight) or Plotly (heavier but feature-rich) — pick D3 for first cut
 **Files:**
@@ -349,7 +347,7 @@
 **Phase:** E1
 **AR-readiness:** + (D3 SVG inside R3F via troika-three-text + custom mesh)
 
-### [P0] B20 · Flow-panel (Mermaid/PlantUML on panel in scene)
+### [P0] B20 · Flow-panel (Mermaid/PlantUML on panel in scene) ↻ Wave 7+8 — PlantUML shipped; Mermaid B20.2
 **Why:** [CONCEPT §2.2](CONCEPT.md); WS-09 node-graph; currently diagrams live only in Inspector
 **What:** Move Mermaid/PlantUML rendering from Inspector to panel widget in scene. Diagrams become interactive (click on node → linked highlighting)
 **Files:**
@@ -376,7 +374,7 @@
 **Phase:** E1
 **AR-readiness:** + (audio cues defer to B40)
 
-### [P1] B22 · Timeline-axis + timeline widget
+### [P1] B22 · Timeline-axis + timeline widget ✓ Wave 7+8
 **Why:** [CONCEPT §1.2.3, §2.4](CONCEPT.md); WS-08 time encoding
 **What:** New primitive `timeline-axis` (horizontal line in scene with tick-marks). Events (artifact-create, edge-add) plotted as colored dots/bars. Currently `by-time` Layout mode places cards left→right; timeline-axis makes that *explicit and interactive*
 **Files:**
@@ -391,7 +389,7 @@
 **Phase:** E1
 **AR-readiness:** +
 
-### [P1] B23 · Volume primitive + graph-3d widget
+### [P1] B23 · Volume primitive + graph-3d widget ↻ Wave 7+8 — graph-3d shipped; standalone Volume B23.2
 **Why:** [CONCEPT §1.2.4, §2.3](CONCEPT.md); TheBrain focus-plus-context discipline
 **What:** New primitive `volume` (translucent bounded 3D box, ~4×4×4). Hosts `graph-3d` widget — force-directed network of point-glyphs, max 30 nodes (focus-plus-context)
 **Files:**
@@ -406,7 +404,7 @@
 **Phase:** E1
 **AR-readiness:** + (camera fly-in is XR-native pattern)
 
-### [P1] B24 · Camera fly-in to volume / cluster (Houdini dive-in)
+### [P1] B24 · Camera fly-in to volume / cluster (Houdini dive-in) ✓ Wave 7+8
 **Why:** WS-09 Houdini sub-network dive-in; [Q9.1 open-questions](../research/synthesis/open-questions.md)
 **What:** Double-click + zoom-past-threshold on a Volume or Cluster → camera flies inside; scene root effectively switches to the contained subgraph
 **Files:**
@@ -419,7 +417,7 @@
 **Phase:** E1
 **AR-readiness:** + (camera fly works in XR)
 
-### [P1] B25 · Drill-down on chart-panel + graph-3d (double-click → focus)
+### [P1] B25 · Drill-down on chart-panel + graph-3d (double-click → focus) ✓ Wave 7+8
 **Why:** WS-03 BI drill-down; WS-04 Palantir Search Around
 **What:** Double-click on data point in chart-panel or node in graph-3d → identify linked artifact → camera focus on it, Inspector opens
 **Files:**
@@ -432,7 +430,7 @@
 **Phase:** E1
 **AR-readiness:** + (pinch + look = double-click in AR)
 
-### [P2] B26 · Time-travel scrubber UI
+### [P2] B26 · Time-travel scrubber UI ↻ Wave 7+8 — scaffold UI; snapshot replay B26.2
 **Why:** existing v1 ROADMAP "Time-travel scrubber"; CONCEPT §3.2.4
 **What:** Slider UI (in StatusBar or Inspector) — scrub through event log; scene reverts to state at chosen timestamp (read-only). Already have data; UI is missing
 **Files:**
@@ -445,7 +443,7 @@
 **Phase:** E1
 **AR-readiness:** + (voice scrubber in AR via Q1.5)
 
-### [P2] B27 · Lasso select (3D)
+### [P2] B27 · Lasso select (3D) ✓ Wave 7+8
 **Why:** [CONCEPT §3.2.2](CONCEPT.md); WS-06 canvas lasso pattern
 **What:** Drag in empty scene space → 2D screen bounding box → all artifacts within screen-projection selected
 **Files:**

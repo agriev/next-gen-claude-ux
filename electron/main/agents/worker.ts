@@ -171,6 +171,18 @@ export function spawnWorker(opts: SpawnOpts): WorkerHandle {
   const ontologyToolsServer = buildOntologyTools(world);
   const vizToolsServer = buildVizTools(world);
 
+  // B12 — Worker streaming spinner. Fire BEFORE query() so the renderer
+  // shows a "thinking…" placeholder at the spawn position within ms of
+  // the user pressing Enter, instead of waiting 5-12s for the first
+  // create_artifact tool call to land.
+  const spawnPos = getDefaultPosition();
+  bus.emit('world', {
+    type: 'worker.spawned',
+    actionId,
+    prompt: input.text.slice(0, 120),
+    position: spawnPos
+  });
+
   const promise = (async () => {
     const running: Action = { ...action, status: 'running' };
     await world.upsertAction(running);
