@@ -6,6 +6,7 @@ import { buildVizTools, VIZ_TOOL_NAMES } from '../mcp/viz-tools';
 import { bus } from '../event-bus';
 import type { WorldState } from '../world-state';
 import type { Artifact } from '../../../shared/types';
+import { CircuitBreaker } from './circuit-breaker';
 
 const SYSTEM_PROMPT = `You are the Layout agent for a 3D spatial knowledge canvas. Each user message is a JSON delta about artifacts.
 
@@ -57,6 +58,8 @@ export class LayoutAgent {
   private currentQuery: ReturnType<typeof query> | null = null;
   private loopPromise: Promise<void> | null = null;
   private restarting = false;
+  /** B13 — circuit breaker for auto-restart on transient errors. */
+  private breaker = new CircuitBreaker();
 
   // Cumulative input-side tokens used in this session. Reset on context
   // restart. Combines new input + cache-creation; cache reads are essentially
@@ -155,6 +158,9 @@ export class LayoutAgent {
             (usage?.cache_creation_input_tokens ?? 0);
           this.cumulativeInputTokens += newInput;
           console.log('[layout] result', subtype);
+          // B13 — reset breaker on a successful turn so transient errors
+          // don't accumulate over a long-running healthy session.
+          if (subtype === 'success') this.breaker.recordSuccess();
           if (this.currentTurn) {
             const elapsed = Date.now() - this.currentTurn.startedAt;
             const seconds = (elapsed / 1000).toFixed(1);
@@ -207,6 +213,27 @@ export class LayoutAgent {
           level: 'warn',
           message: `layout: ${err instanceof Error ? err.message : 'error'}`
         });
+        // B13 — circuit breaker. Schedule a restart after a backoff;
+        // breaker decides if/when we give up.
+        const backoff = this.breaker.recordFailure();
+        const status = this.breaker.status();
+        bus.emit('agentLog', {
+          agentRole: 'layout', agentId: 'layout',
+          kind: 'note',
+          text: `⚠ layout error — breaker=${status.state} failures=${status.failuresInWindow} restart in ${(backoff / 1000).toFixed(1)}s`,
+          ts: Date.now()
+        });
+        if (Number.isFinite(backoff)) {
+          setTimeout(() => {
+            this.breaker.beginProbe();
+            void this.restart('error');
+          }, backoff);
+        } else {
+          bus.emit('world', {
+            type: 'toast', level: 'error',
+            message: 'layout: too many failures, giving up restart — use Reset Context'
+          });
+        }
       }
     } finally {
       this.currentQuery = null;
@@ -274,7 +301,7 @@ export class LayoutAgent {
    * Safe to call concurrently — the `restarting` flag de-dupes. Any deltas
    * queued during the restart are preserved and replayed after `hello`.
    */
-  private async restart(trigger: 'auto' | 'manual'): Promise<void> {
+  private async restart(trigger: 'auto' | 'manual' | 'error'): Promise<void> {
     if (this.restarting) return;
     this.restarting = true;
     const tokensBefore = this.cumulativeInputTokens;
