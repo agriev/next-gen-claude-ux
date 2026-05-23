@@ -1,6 +1,6 @@
 import type {
   Artifact, Edge, Action, TranscriptChunk, AgentRole, ListeningStatus,
-  Board, Bookmark, Notification
+  Board, Bookmark, Notification, LinkType, Panel
 } from './types';
 
 export type WorldEvent =
@@ -8,6 +8,10 @@ export type WorldEvent =
   | { type: 'artifact.removed'; id: string }
   | { type: 'edge.upserted'; edge: Edge }
   | { type: 'edge.removed'; id: string }
+  | { type: 'panel.upserted'; panel: Panel }
+  | { type: 'panel.removed'; id: string }
+  | { type: 'link-type.upserted'; linkType: LinkType }
+  | { type: 'link-type.removed'; id: string }
   | { type: 'layout.updated'; positions: Array<{ id: string; x: number; y: number; z: number }> }
   | { type: 'action.status'; action: Action }
   | { type: 'transcript.chunk'; chunk: TranscriptChunk }

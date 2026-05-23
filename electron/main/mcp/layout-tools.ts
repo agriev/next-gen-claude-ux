@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import type { WorldState } from '../world-state';
-import type { Edge, EdgeKind, Artifact } from '../../../shared/types';
+import type { Edge, Artifact } from '../../../shared/types';
 import { bus } from '../event-bus';
 
 /**
@@ -43,16 +43,20 @@ export function buildLayoutTools(world: WorldState) {
 
   const drawEdge = tool(
     'draw_edge',
-    'Draw a relationship between two artifacts. Only call when relation is clear. Sparse is better than dense.',
+    'Draw a relationship between two artifacts. The `kind` is a link-type id from the registry — call list_link_types to discover available ids, or register_link_type to create a new one. Built-in ids: derives, references, contradicts, groups-with. Only call when relation is clear. Sparse is better than dense.',
     {
       src: z.string(),
       dst: z.string(),
-      kind: z.enum(['derives', 'references', 'contradicts', 'groups-with']),
+      kind: z.string().describe('Link type id (e.g. "derives" or any custom id from the registry).'),
       weight: z.number().optional()
     },
     async args => {
       if (args.src === args.dst) {
         return { content: [{ type: 'text' as const, text: 'error: self-edge' }], isError: true };
+      }
+      if (!world.hasLinkType(args.kind)) {
+        const known = world.listLinkTypes().map(t => t.id).join(', ');
+        return { content: [{ type: 'text' as const, text: `error: unknown link type "${args.kind}". Known: ${known}. Call register_link_type to create a new one.` }], isError: true };
       }
       const srcA = world.getArtifact(args.src);
       const dstA = world.getArtifact(args.dst);
@@ -63,7 +67,7 @@ export function buildLayoutTools(world: WorldState) {
         id: nanoid(10),
         src: args.src,
         dst: args.dst,
-        kind: args.kind as EdgeKind,
+        kind: args.kind,
         weight: args.weight ?? 1,
         createdBy: 'layout'
       };
@@ -89,7 +93,7 @@ export function buildLayoutTools(world: WorldState) {
     'List all edges on the active board, or only those incident to a specific artifact (by id or shortName). Returns one row per edge: id, direction, endpoints (both id and shortName), kind, weight, optional label, and creator (user/worker/layout). Use this before update_edge or remove_edge so you know which edges already exist.',
     {
       artifactId: z.string().optional().describe('Optional id or shortName. When set, only edges where this artifact is src or dst are returned.'),
-      kind: z.enum(['derives', 'references', 'contradicts', 'groups-with']).optional()
+      kind: z.string().optional().describe('Optional link-type id filter.')
     },
     async args => {
       let target: Artifact | undefined;
@@ -131,10 +135,10 @@ export function buildLayoutTools(world: WorldState) {
 
   const updateEdge = tool(
     'update_edge',
-    'Update an existing edge: change its kind, weight, or human-readable label. Pass only the fields you want to change. Use list_edges first to find the id.',
+    'Update an existing edge: change its kind (any registered link-type id), weight, or human-readable label. Pass only the fields you want to change. Use list_edges first to find the id, list_link_types for valid kinds.',
     {
       id: z.string(),
-      kind: z.enum(['derives', 'references', 'contradicts', 'groups-with']).optional(),
+      kind: z.string().optional().describe('Link-type id from the registry.'),
       weight: z.number().optional(),
       label: z.string().nullable().optional().describe('Pass null to clear an existing label, omit to leave unchanged.')
     },
@@ -143,9 +147,13 @@ export function buildLayoutTools(world: WorldState) {
       if (!existing) {
         return { content: [{ type: 'text' as const, text: `error: no edge ${args.id}` }], isError: true };
       }
+      if (args.kind !== undefined && !world.hasLinkType(args.kind)) {
+        const known = world.listLinkTypes().map(t => t.id).join(', ');
+        return { content: [{ type: 'text' as const, text: `error: unknown link type "${args.kind}". Known: ${known}.` }], isError: true };
+      }
       const updated: Edge = {
         ...existing,
-        kind: (args.kind as EdgeKind) ?? existing.kind,
+        kind: args.kind ?? existing.kind,
         weight: args.weight ?? existing.weight,
         label: args.label === null ? undefined : (args.label ?? existing.label)
       };
@@ -205,7 +213,7 @@ export function buildLayoutTools(world: WorldState) {
       edges: z.array(z.object({
         src: z.string(),
         dst: z.string(),
-        kind: z.enum(['derives', 'references', 'contradicts', 'groups-with']),
+        kind: z.string().describe('Link-type id from registry (built-ins: derives, references, contradicts, groups-with).'),
         weight: z.number().optional()
       })).optional().describe('Optional new edges to draw.'),
       replaceEdges: z.boolean().optional().describe('If true, delete all existing layout-created edges before adding the new ones. User-drawn edges are preserved.')
@@ -241,16 +249,18 @@ export function buildLayoutTools(world: WorldState) {
 
       // 3. Add new edges.
       let edgesAdded = 0;
+      let edgesDroppedUnknownKind = 0;
       if (args.edges) {
         for (const e of args.edges) {
           const srcA = resolveArtifact(world, e.src);
           const dstA = resolveArtifact(world, e.dst);
           if (!srcA || !dstA || srcA.id === dstA.id) continue;
+          if (!world.hasLinkType(e.kind)) { edgesDroppedUnknownKind++; continue; }
           const edge: Edge = {
             id: nanoid(10),
             src: srcA.id,
             dst: dstA.id,
-            kind: e.kind as EdgeKind,
+            kind: e.kind,
             weight: e.weight ?? 1,
             createdBy: 'layout'
           };
@@ -278,7 +288,8 @@ export function buildLayoutTools(world: WorldState) {
         clustersCreated ? `${clustersCreated} clusters` : null,
         clustersDropped ? `${clustersDropped} clusters dropped (unresolved members)` : null,
         edgesAdded ? `+${edgesAdded} edges` : null,
-        edgesRemoved ? `-${edgesRemoved} edges` : null
+        edgesRemoved ? `-${edgesRemoved} edges` : null,
+        edgesDroppedUnknownKind ? `${edgesDroppedUnknownKind} edges dropped (unknown link_type)` : null
       ].filter(Boolean).join(' · ');
 
       return { content: [{ type: 'text' as const, text: `layout plan applied: ${summary}` }] };

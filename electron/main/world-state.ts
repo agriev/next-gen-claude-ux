@@ -7,7 +7,7 @@ import { runMigrations } from './db/migrations';
 import { Repo } from './db/repo';
 import type {
   Artifact, Edge, Action, Session, TranscriptChunk, WorldSnapshot, Vec3,
-  Board, Bookmark, Notification, ModelSettings
+  Board, Bookmark, Notification, ModelSettings, LinkType, Panel
 } from '../../shared/types';
 import { DEFAULT_MODELS } from '../../shared/types';
 
@@ -20,6 +20,8 @@ export class WorldState {
   private boards = new Map<string, Board>();
   private artifacts = new Map<string, Artifact>();
   private edges = new Map<string, Edge>();
+  private panels = new Map<string, Panel>();
+  private linkTypes = new Map<string, LinkType>();
   private actions = new Map<string, Action>();
   private bookmarks = new Map<string, Bookmark>();
   private shortNameIndex = new Map<string, string>();
@@ -66,9 +68,17 @@ export class WorldState {
       this.repo.upsertSession(this.session);
     }
 
+    this.loadLinkTypes();
     this.loadActiveBoard();
     this.loadModelSettings();
-    console.log(`[world] session=${this.session.id} board=${this.activeBoardId} artifacts=${this.artifacts.size} edges=${this.edges.size}`);
+    console.log(`[world] session=${this.session.id} board=${this.activeBoardId} artifacts=${this.artifacts.size} edges=${this.edges.size} panels=${this.panels.size} linkTypes=${this.linkTypes.size}`);
+  }
+
+  private loadLinkTypes(): void {
+    this.linkTypes.clear();
+    for (const t of this.repo.listLinkTypes()) {
+      this.linkTypes.set(t.id, t);
+    }
   }
 
   private loadModelSettings(): void {
@@ -90,6 +100,7 @@ export class WorldState {
   private loadActiveBoard(): void {
     this.artifacts.clear();
     this.edges.clear();
+    this.panels.clear();
     this.actions.clear();
     this.bookmarks.clear();
     this.shortNameIndex.clear();
@@ -99,6 +110,9 @@ export class WorldState {
     }
     for (const e of this.repo.listEdgesByBoard(this.activeBoardId)) {
       this.edges.set(e.id, e);
+    }
+    for (const p of this.repo.listPanelsByBoard(this.activeBoardId)) {
+      this.panels.set(p.id, p);
     }
     for (const a of this.repo.listActions(this.session.id)) {
       this.actions.set(a.id, a);
@@ -171,6 +185,8 @@ export class WorldState {
       boards: [...this.boards.values()],
       artifacts: [...this.artifacts.values()],
       edges: [...this.edges.values()],
+      panels: [...this.panels.values()],
+      linkTypes: [...this.linkTypes.values()],
       actions: [...this.actions.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 200),
       bookmarks: [...this.bookmarks.values()],
       notifications: this.repo.listNotifications(50),
@@ -318,6 +334,79 @@ export class WorldState {
   getEdge(id: string): Edge | undefined { return this.edges.get(id); }
   getAllEdges(): Edge[] { return [...this.edges.values()]; }
   getRepo(): Repo { return this.repo; }
+
+  // ---------- link types ----------
+
+  listLinkTypes(): LinkType[] { return [...this.linkTypes.values()]; }
+  getLinkType(id: string): LinkType | undefined { return this.linkTypes.get(id); }
+  hasLinkType(id: string): boolean { return this.linkTypes.has(id); }
+
+  registerLinkType(t: LinkType): Promise<void> {
+    return this.serial(() => {
+      this.linkTypes.set(t.id, t);
+      this.repo.upsertLinkType(t);
+    });
+  }
+
+  updateLinkType(id: string, patch: Partial<Pick<LinkType, 'label' | 'color' | 'icon' | 'isDirected'>>): Promise<LinkType | null> {
+    return this.serial(() => {
+      const existing = this.linkTypes.get(id);
+      if (!existing) return null;
+      const updated: LinkType = {
+        ...existing,
+        ...('label' in patch && patch.label !== undefined ? { label: patch.label } : {}),
+        ...('color' in patch && patch.color !== undefined ? { color: patch.color } : {}),
+        ...('icon' in patch ? { icon: patch.icon } : {}),
+        ...('isDirected' in patch && patch.isDirected !== undefined ? { isDirected: patch.isDirected } : {})
+      };
+      this.linkTypes.set(id, updated);
+      this.repo.upsertLinkType(updated);
+      return updated;
+    });
+  }
+
+  deleteLinkType(id: string): Promise<boolean> {
+    return this.serial(() => {
+      const ok = this.repo.deleteLinkType(id);
+      if (ok) this.linkTypes.delete(id);
+      return ok;
+    });
+  }
+
+  // ---------- panels ----------
+
+  upsertPanel(p: Panel): Promise<void> {
+    return this.serial(() => {
+      const withBoard: Panel = p.boardId ? p : { ...p, boardId: this.activeBoardId };
+      const withAnchor: Panel = withBoard.anchor ? withBoard : { ...withBoard, anchor: 'world' };
+      if (withAnchor.boardId === this.activeBoardId) {
+        this.panels.set(withAnchor.id, withAnchor);
+      } else {
+        this.panels.delete(withAnchor.id);
+      }
+      this.repo.upsertPanel(withAnchor, this.session.id);
+    });
+  }
+
+  removePanel(id: string): Promise<void> {
+    return this.serial(() => {
+      this.panels.delete(id);
+      this.repo.removePanel(id);
+    });
+  }
+
+  getPanel(id: string): Panel | undefined { return this.panels.get(id); }
+  getAllPanels(): Panel[] { return [...this.panels.values()]; }
+
+  setPanelPosition(id: string, position: Vec3, pinned: boolean): Promise<void> {
+    return this.serial(() => {
+      const p = this.panels.get(id);
+      if (!p) return;
+      const updated: Panel = { ...p, position, pinned, updatedAt: Date.now() };
+      this.panels.set(id, updated);
+      this.repo.upsertPanel(updated, this.session.id);
+    });
+  }
 
   close(): void { this.db?.close(); }
 }

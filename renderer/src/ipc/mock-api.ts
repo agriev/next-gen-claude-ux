@@ -1,5 +1,5 @@
 import type { WorldSnapshot, Artifact, Edge, Board } from '@shared/types';
-import { DEFAULT_MODELS } from '@shared/types';
+import { DEFAULT_MODELS, BUILTIN_LINK_TYPES } from '@shared/types';
 import { MARKETING_ARTIFACTS, MARKETING_EDGES } from '@shared/seed-marketing';
 
 const MOCK_BOARD: Board = {
@@ -40,6 +40,8 @@ const MOCK_SNAPSHOT: WorldSnapshot = {
   boards: [MOCK_BOARD],
   artifacts: MOCK_ARTIFACTS,
   edges: MOCK_EDGES,
+  panels: [],
+  linkTypes: BUILTIN_LINK_TYPES,
   actions: [],
   bookmarks: [],
   notifications: [],

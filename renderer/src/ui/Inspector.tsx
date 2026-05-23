@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useWorldStore } from '../store/world-store';
-import type { Artifact, Edge, EdgeKind } from '@shared/types';
+import type { Artifact, Edge, LinkType } from '@shared/types';
 import { DraggablePanel } from './DraggablePanel';
 import { splitBody } from '../util/diagrams';
 import { DiagramRenderer } from './DiagramRenderer';
@@ -14,17 +14,15 @@ const KIND_TINT: Record<Artifact['kind'], string> = {
   log: '#8A8F98',
   image: '#A78BFA',
   link: '#A78BFA',
-  cluster: '#A78BFA'
+  cluster: '#A78BFA',
+  frame: '#5EEAD4'
 };
 
-const EDGE_COLOR: Record<EdgeKind, string> = {
-  derives: '#5EEAD4',
-  references: '#8A8F98',
-  contradicts: '#FBBF24',
-  'groups-with': '#A78BFA'
-};
+const FALLBACK_EDGE_COLOR = '#6B7280';
 
-const EDGE_KINDS: EdgeKind[] = ['derives', 'references', 'contradicts', 'groups-with'];
+function edgeColorFromRegistry(kind: string, linkTypes: LinkType[]): string {
+  return linkTypes.find(t => t.id === kind)?.color ?? FALLBACK_EDGE_COLOR;
+}
 
 export function Inspector() {
   const inspectorId = useWorldStore(s => s.inspectorArtifactId);
@@ -422,18 +420,20 @@ interface ConnectionRowProps {
   onSelect: () => void;
   onOpenOther: (id: string) => void;
   onDelete: () => void;
-  onChangeKind: (kind: EdgeKind) => void;
+  onChangeKind: (kind: string) => void;
 }
 
 function ConnectionRow({
   edge, anchorId, artifacts, selected,
   onSelect, onOpenOther, onDelete, onChangeKind
 }: ConnectionRowProps) {
+  const linkTypes = useWorldStore(s => s.linkTypes);
   const outgoing = edge.src === anchorId;
   const otherId = outgoing ? edge.dst : edge.src;
   const other = artifacts.get(otherId);
-  const color = EDGE_COLOR[edge.kind];
-  const labelText = edge.label || edge.kind;
+  const color = edgeColorFromRegistry(edge.kind, linkTypes);
+  const linkType = linkTypes.find(t => t.id === edge.kind);
+  const labelText = edge.label || linkType?.label || edge.kind;
 
   const [picking, setPicking] = useState(false);
 
@@ -513,23 +513,24 @@ function ConnectionRow({
             borderRadius: 4
           }}
         >
-          {EDGE_KINDS.map(k => (
+          {linkTypes.map(t => (
             <button
-              key={k}
-              onClick={(e) => { e.stopPropagation(); onChangeKind(k); setPicking(false); }}
+              key={t.id}
+              onClick={(e) => { e.stopPropagation(); onChangeKind(t.id); setPicking(false); }}
               style={{
-                background: edge.kind === k ? `${EDGE_COLOR[k]}22` : 'transparent',
-                border: `1px solid ${EDGE_COLOR[k]}55`,
-                color: EDGE_COLOR[k],
+                background: edge.kind === t.id ? `${t.color}22` : 'transparent',
+                border: `1px solid ${t.color}55`,
+                color: t.color,
                 borderRadius: 3,
                 padding: '1px 5px',
                 fontSize: 9,
                 fontFamily: 'JetBrains Mono, monospace',
                 cursor: 'pointer',
-                fontWeight: edge.kind === k ? 600 : 400
+                fontWeight: edge.kind === t.id ? 600 : 400
               }}
+              title={t.label}
             >
-              {k}
+              {t.icon ? `${t.icon} ` : ''}{t.id}
             </button>
           ))}
         </div>

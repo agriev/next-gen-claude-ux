@@ -17,7 +17,9 @@ const PALETTE: Record<ArtifactKind, Palette> = {
   log:     { bg: '#14161B', text: '#8A8F98', muted: '#5A5F68', accent: '#5A5F68', border: '#2A2D34', mono: true  },
   image:   { bg: '#F4F4F2', text: '#0A0B0E', muted: '#5A5F68', accent: '#5EEAD4', border: '#22252B', mono: false },
   link:    { bg: '#1E1A2E', text: '#E8EAED', muted: '#A78BFA', accent: '#A78BFA', border: '#A78BFA', mono: false },
-  cluster: { bg: '#1A1530', text: '#E8EAED', muted: '#8A8F98', accent: '#A78BFA', border: '#A78BFA', mono: false }
+  cluster: { bg: '#1A1530', text: '#E8EAED', muted: '#8A8F98', accent: '#A78BFA', border: '#A78BFA', mono: false },
+  // Frame is rendered via R3F mesh — texture not used. Stub palette for type completeness.
+  frame:   { bg: '#101418', text: '#E8EAED', muted: '#8A8F98', accent: '#5EEAD4', border: '#5EEAD4', mono: false }
 };
 
 const TEX_W = 1024;
