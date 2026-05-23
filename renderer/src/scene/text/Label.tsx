@@ -1,7 +1,7 @@
 /**
  * Label — SDF text rendered as a 3D mesh via drei <Text> (troika-three-text).
  *
- * Replaces drei <Html> overlays for pure-text labels in the scene.
+ * Replaces drei drei Html overlays for pure-text labels in the scene.
  * Three advantages over Html:
  *   1. AR-readiness — works inside WebXR sessions (Html requires DOM portal)
  *   2. Performance — single draw call per text mesh, no React DOM reconciliation
@@ -12,7 +12,7 @@
  *   - White-ish foreground with dark stroke for legibility on any background
  *   - Billboarded toward camera (Text already does this by default in drei)
  *
- * For interactive labels (clickable, with buttons inside) — keep using <Html>
+ * For interactive labels (clickable, with buttons inside) — keep using drei Html
  * for now. Replacement of interactive overlays is a separate card scheduled
  * after E0 (needs R3F mesh-based button affordance design).
  *
