@@ -2,11 +2,11 @@ import { useRef, useMemo, useEffect, useState } from 'react';
 import { useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Html, Billboard } from '@react-three/drei';
 import { Group, Vector2, Vector3, Plane, Raycaster } from 'three';
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { Artifact } from '@shared/types';
 import { makeCardTexture } from './card-texture';
 import { useWorldStore } from '../store/world-store';
 import { setLivePos, removeLivePos, getLivePos } from './live-transforms';
+import type { CameraController } from './camera/CameraController';
 
 interface Props {
   artifact: Artifact;
@@ -33,7 +33,7 @@ const DRAG_THRESHOLD_SQ = 25; // 5px
 export function ArtifactObject({ artifact, targetPosition, selected, dimmed = false, onSelect }: Props) {
   const groupRef = useRef<Group>(null);
   const camera = useThree(s => s.camera);
-  const controls = useThree(s => s.controls) as OrbitControlsImpl | null;
+  const controls = useThree(s => s.controls) as CameraController | null;
   const gl = useThree(s => s.gl);
 
   const target = useMemo(

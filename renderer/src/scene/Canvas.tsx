@@ -1,16 +1,16 @@
 import { useEffect, useMemo } from 'react';
 import { Canvas as R3FCanvas, useThree, useFrame } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
 import { Box3, Vector3 } from 'three';
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { useWorldStore } from '../store/world-store';
 import { ArtifactObject } from './Artifact';
 import { EdgeObject } from './Edge';
+import { OrbitCameraController } from './camera/OrbitCameraController';
+import type { CameraController } from './camera/CameraController';
 import type { Artifact } from '@shared/types';
 
 function CameraFitter() {
   const camera = useThree(s => s.camera) as unknown as { position: Vector3; updateProjectionMatrix: () => void; fov?: number };
-  const controls = useThree(s => s.controls) as OrbitControlsImpl | null;
+  const controls = useThree(s => s.controls) as CameraController | null;
   const targets = useWorldStore(s => s.targetPositions);
   const artifacts = useWorldStore(s => s.artifacts);
   const frameAllAt = useWorldStore(s => s.frameAllAt);
@@ -98,7 +98,7 @@ function CameraFitter() {
 
 function CameraFocusReporter() {
   const camera = useThree(s => s.camera);
-  const controls = useThree(s => s.controls) as OrbitControlsImpl | null;
+  const controls = useThree(s => s.controls) as CameraController | null;
 
   useFrame(() => {
     if (!controls) return;
@@ -119,7 +119,7 @@ function CameraFocusReporter() {
 
 function BookmarkCapture() {
   const camera = useThree(s => s.camera);
-  const controls = useThree(s => s.controls) as OrbitControlsImpl | null;
+  const controls = useThree(s => s.controls) as CameraController | null;
 
   useEffect(() => {
     const handler = async (e: Event) => {
@@ -225,12 +225,7 @@ export function Canvas() {
         return <EdgeObject key={e.id} edge={e} source={src} target={dst} highlighted={highlighted} dimmed={dim} />;
       })}
 
-      <OrbitControls
-        makeDefault
-        enableDamping
-        dampingFactor={0.08}
-        enableRotate={cameraMode !== 'top-down'}
-      />
+      <OrbitCameraController />
       <CameraFitter />
       <CameraFocusReporter />
       <BookmarkCapture />
