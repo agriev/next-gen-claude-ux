@@ -90,6 +90,13 @@ export function ArtifactObject({ artifact, targetPosition, selected, dimmed = fa
   // Single-source pointer-down handler that decides click-vs-drag by movement threshold.
   const handlePointerDown = (ev: ThreeEvent<PointerEvent>) => {
     ev.stopPropagation();
+    // B11 — alt+click opens the radial marking menu at the cursor position.
+    // We branch before the click-vs-drag heuristic so alt doesn't accidentally
+    // trigger a drag-to-move when the user moves their mouse slightly.
+    if (ev.altKey) {
+      useWorldStore.getState().openMarkingMenu(artifact.id, ev.clientX, ev.clientY);
+      return;
+    }
     const startClientX = ev.clientX;
     const startClientY = ev.clientY;
     const additive = ev.shiftKey;
