@@ -7,6 +7,7 @@ import { makeCardTexture } from './card-texture';
 import { useWorldStore } from '../store/world-store';
 import { setLivePos, removeLivePos, getLivePos } from './live-transforms';
 import type { CameraController } from './camera/CameraController';
+import { Label } from './text/Label';
 
 interface Props {
   artifact: Artifact;
@@ -314,30 +315,16 @@ function ClusterMesh({ artifact, groupRef, selected, dimmed, handlePointerDown, 
         <meshBasicMaterial color={tint} wireframe transparent opacity={selected ? 0.9 : 0.45} />
       </mesh>
 
-      <Html
+      {/* AR-ready label via troika SDF text (replaces Html overlay). */}
+      <Label
         position={[0, PLACEHOLDER_H / 2 + 0.4, 0]}
-        center
-        distanceFactor={12}
-        zIndexRange={[14, 0]}
-        style={{ pointerEvents: 'none', userSelect: 'none' }}
+        color={tint}
+        fontSize={0.24}
+        outlineWidth={0.018}
+        renderOrder={14}
       >
-        <div style={{
-          color: tint,
-          fontSize: 16,
-          fontFamily: 'Inter, sans-serif',
-          fontWeight: 600,
-          textShadow: '0 1px 6px rgba(0,0,0,0.9)',
-          whiteSpace: 'nowrap',
-          letterSpacing: 0.3,
-          padding: '4px 10px',
-          background: 'rgba(20,22,27,0.85)',
-          border: `1px solid ${tint}66`,
-          borderRadius: 999,
-          backdropFilter: 'blur(8px)'
-        }}>
-          ◇ {artifact.title} <span style={{ color: '#5A5F68', fontSize: 12, marginLeft: 4 }}>· {refs.length}</span>
-        </div>
-      </Html>
+        {`◇ ${artifact.title} · ${refs.length}`}
+      </Label>
     </group>
   );
 }
