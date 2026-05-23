@@ -122,10 +122,27 @@ export type NotificationKind =
 
 export type NotificationLevel = 'info' | 'success' | 'warn' | 'error';
 
+/**
+ * B21 — alarm severity, layered ON TOP of level. Level still drives basic
+ * coloring; severity opts a notification into specific visual + (future)
+ * audio treatments:
+ *
+ *   info     — passive, fades to backlog
+ *   warning  — orange-bordered, persists until dismissed
+ *   critical — red border + rim pulse; demands attention
+ *   blocker  — full red, blocks `worker.done` notifications until cleared
+ *              (i.e. you must address this before new work surfaces)
+ *
+ * Default is `'info'` to keep existing notifications unchanged.
+ */
+export type NotificationSeverity = 'info' | 'warning' | 'critical' | 'blocker';
+
 export interface Notification {
   id: string;
   kind: NotificationKind;
   level: NotificationLevel;
+  /** B21 — alarm taxonomy (4-tier). Defaults to 'info' when omitted. */
+  severity?: NotificationSeverity;
   title: string;
   body?: string;
   payload?: Record<string, unknown>;

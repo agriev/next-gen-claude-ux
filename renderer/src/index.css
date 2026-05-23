@@ -30,3 +30,9 @@ html, body, #root {
 code, pre, .mono {
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
 }
+
+/* B21 — alarm pulse for critical / blocker notifications. */
+@keyframes jarvis-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}

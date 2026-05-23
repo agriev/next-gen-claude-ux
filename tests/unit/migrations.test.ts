@@ -54,10 +54,17 @@ describe.skipIf(!NATIVE_OK)('runMigrations', () => {
     db = freshDb();
   });
 
-  it('applies all 6 migrations on a fresh DB', () => {
+  it('applies all 7 migrations on a fresh DB', () => {
     runMigrations(db);
     const row = db.prepare('SELECT MAX(version) AS v FROM schema_version').get() as SchemaVersionRow;
-    expect(row.v).toBe(6);
+    expect(row.v).toBe(7);
+  });
+
+  it('notifications.severity default is info (B21)', () => {
+    runMigrations(db);
+    const cols = db.prepare("PRAGMA table_info(notifications)").all() as Array<{ name: string; dflt_value: string | null }>;
+    const sev = cols.find(c => c.name === 'severity');
+    expect(sev?.dflt_value).toBe("'info'");
   });
 
   it('is idempotent — second call is a no-op', () => {

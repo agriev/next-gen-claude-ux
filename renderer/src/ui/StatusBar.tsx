@@ -5,6 +5,8 @@ export function StatusBar() {
   const edgeCount = useWorldStore(s => s.edges.size);
   const listeningStatus = useWorldStore(s => s.listeningStatus);
   const requestFrameAll = useWorldStore(s => s.requestFrameAll);
+  const viewMode = useWorldStore(s => s.viewMode);
+  const toggleViewMode = useWorldStore(s => s.toggleViewMode);
 
   return (
     <div style={{
@@ -51,6 +53,25 @@ export function StatusBar() {
         title="Frame all artifacts (F)"
       >
         Frame all
+      </button>
+      {/* B16 — view mode toggle. Tab also flips this. */}
+      <button
+        onClick={toggleViewMode}
+        style={{
+          pointerEvents: 'auto',
+          padding: '4px 10px',
+          background: viewMode === 'console' ? 'rgba(167,139,250,0.18)' : 'rgba(20, 22, 27, 0.85)',
+          border: `1px solid ${viewMode === 'console' ? '#A78BFA' : '#2A2D34'}`,
+          borderRadius: 999,
+          color: viewMode === 'console' ? '#A78BFA' : '#E8EAED',
+          fontSize: 11,
+          fontFamily: 'inherit',
+          cursor: 'pointer',
+          backdropFilter: 'blur(8px)'
+        }}
+        title="Toggle Canvas ↔ Console mode (Tab)"
+      >
+        {viewMode === 'console' ? '◧ Console' : '◇ Canvas'}
       </button>
     </div>
   );
