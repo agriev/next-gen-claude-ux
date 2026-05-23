@@ -165,6 +165,61 @@ const MIGRATIONS: Migration[] = [
     sql: `
       ALTER TABLE edges ADD COLUMN label TEXT;
     `
+  },
+  {
+    version: 5,
+    // Typed link-type registry. B02. Built-in four kinds are seeded so that
+    // existing edges (which already reference these ids via Edge.kind) keep
+    // rendering with correct color/label. Additive only — no edge data
+    // touched. To roll back, drop link_types; the edges table is unaffected.
+    sql: `
+      CREATE TABLE link_types (
+        id TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        color TEXT NOT NULL,
+        icon TEXT,
+        is_directed INTEGER NOT NULL DEFAULT 1,
+        is_builtin INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      );
+
+      INSERT INTO link_types (id, label, color, icon, is_directed, is_builtin, created_at) VALUES
+        ('derives',     'Derives from', '#5EEAD4', NULL, 1, 1, strftime('%s','now')*1000),
+        ('references',  'References',   '#8A8F98', NULL, 0, 1, strftime('%s','now')*1000),
+        ('contradicts', 'Contradicts',  '#FBBF24', NULL, 0, 1, strftime('%s','now')*1000),
+        ('groups-with', 'Groups with',  '#A78BFA', NULL, 0, 1, strftime('%s','now')*1000);
+    `
+  },
+  {
+    version: 6,
+    // Panel primitive. B17. 2D surface in 3D that hosts widgets (charts,
+    // flows, timelines, graph-3d). Anchor field is plumbed up-front for
+    // future visionOS port (M5) so we never need a migration to add it.
+    // Additive: no existing column touched.
+    sql: `
+      CREATE TABLE panels (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id),
+        board_id TEXT NOT NULL REFERENCES boards(id),
+        title TEXT NOT NULL,
+        position_x REAL NOT NULL,
+        position_y REAL NOT NULL,
+        position_z REAL NOT NULL,
+        rotation_x REAL,
+        rotation_y REAL,
+        rotation_z REAL,
+        size_w REAL NOT NULL DEFAULT 3.0,
+        size_h REAL NOT NULL DEFAULT 2.0,
+        widget_kind TEXT NOT NULL DEFAULT 'empty',
+        widget_spec TEXT NOT NULL DEFAULT '{}',
+        anchor TEXT NOT NULL DEFAULT 'world',
+        pinned INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_by TEXT NOT NULL
+      );
+      CREATE INDEX idx_panels_board ON panels(board_id);
+    `
   }
 ];
 

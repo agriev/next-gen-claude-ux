@@ -15,7 +15,8 @@ const KIND_EXT: Record<ArtifactKind, string> = {
   log: '.log',
   image: '.image',
   link: '.link',
-  cluster: '.cluster.md'
+  cluster: '.cluster.md',
+  frame: '.frame.md'
 };
 
 function extFor(a: Artifact): string {

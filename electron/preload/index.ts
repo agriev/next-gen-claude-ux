@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { IPC } from '../../shared/ipc-channels';
 import type { WorldDeltaBatch, AgentLogEvent } from '../../shared/events';
 import type {
-  WorldSnapshot, Vec3, Artifact, EdgeKind, Board, Bookmark
+  WorldSnapshot, Vec3, Artifact, Board, Bookmark
 } from '../../shared/types';
 import type { SearchResult, PendingAttachment, SubmitUtteranceResponse } from '../../shared/ipc-channels';
 
@@ -24,11 +24,11 @@ const api = {
     ipcRenderer.invoke(IPC.cmd.unpinArtifact, { id }),
   moveArtifact: (id: string, position: Vec3): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.moveArtifact, { id, position }),
-  createEdge: (src: string, dst: string, kind: EdgeKind, label?: string): Promise<void> =>
+  createEdge: (src: string, dst: string, kind: string, label?: string): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.createEdge, { src, dst, kind, label }),
   deleteEdge: (id: string): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.deleteEdge, { id }),
-  updateEdge: (id: string, opts: { kind?: EdgeKind; weight?: number; label?: string | null }): Promise<void> =>
+  updateEdge: (id: string, opts: { kind?: string; weight?: number; label?: string | null }): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.updateEdge, { id, ...opts }),
   deleteArtifact: (id: string): Promise<void> =>
     ipcRenderer.invoke(IPC.cmd.deleteArtifact, { id }),

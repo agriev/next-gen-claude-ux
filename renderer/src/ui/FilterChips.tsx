@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useWorldStore } from '../store/world-store';
 import type { ArtifactKind } from '@shared/types';
 
-const ALL_KINDS: ArtifactKind[] = ['doc', 'note', 'code', 'log', 'image', 'link', 'cluster'];
+const ALL_KINDS: ArtifactKind[] = ['doc', 'note', 'code', 'log', 'image', 'link', 'cluster', 'frame'];
 
 const KIND_TINT: Record<ArtifactKind, string> = {
   doc: '#E8EAED',
@@ -11,7 +11,8 @@ const KIND_TINT: Record<ArtifactKind, string> = {
   log: '#8A8F98',
   image: '#A78BFA',
   link: '#A78BFA',
-  cluster: '#A78BFA'
+  cluster: '#A78BFA',
+  frame: '#5EEAD4'
 };
 
 export function FilterChips() {

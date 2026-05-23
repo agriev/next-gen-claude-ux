@@ -1,8 +1,9 @@
 import type Database from 'better-sqlite3';
 import type {
   Artifact, Edge, Action, Session, TranscriptChunk, Utterance, ArtifactSpec, Vec3,
-  ArtifactKind, ArtifactState, EdgeKind, ActionKind, ActionStatus, AgentRole, TranscriptSource,
-  Board, Bookmark, Notification, NotificationKind, NotificationLevel, Attachment
+  ArtifactKind, ArtifactState, ActionKind, ActionStatus, AgentRole, TranscriptSource,
+  Board, Bookmark, Notification, NotificationKind, NotificationLevel, Attachment,
+  LinkType, Panel, PanelWidget, PanelWidgetKind, AnchorMode
 } from '../../../shared/types';
 
 interface ArtifactRow {
@@ -81,9 +82,57 @@ function rowToArtifact(r: ArtifactRow): Artifact {
 function rowToEdge(r: EdgeRow): Edge {
   return {
     id: r.id, src: r.src, dst: r.dst,
-    kind: r.kind as EdgeKind, weight: r.weight,
+    kind: r.kind, weight: r.weight,
     createdBy: r.created_by as Edge['createdBy'],
     label: r.label ?? undefined
+  };
+}
+
+interface LinkTypeRow {
+  id: string; label: string; color: string; icon: string | null;
+  is_directed: number; is_builtin: number; created_at: number;
+}
+
+function rowToLinkType(r: LinkTypeRow): LinkType {
+  return {
+    id: r.id, label: r.label, color: r.color,
+    icon: r.icon ?? undefined,
+    isDirected: r.is_directed === 1,
+    isBuiltin: r.is_builtin === 1,
+    createdAt: r.created_at
+  };
+}
+
+interface PanelRow {
+  id: string; session_id: string; board_id: string; title: string;
+  position_x: number; position_y: number; position_z: number;
+  rotation_x: number | null; rotation_y: number | null; rotation_z: number | null;
+  size_w: number; size_h: number;
+  widget_kind: string; widget_spec: string;
+  anchor: string; pinned: number;
+  created_at: number; updated_at: number; created_by: string;
+}
+
+function rowToPanel(r: PanelRow): Panel {
+  const rotation = (r.rotation_x !== null && r.rotation_y !== null && r.rotation_z !== null)
+    ? { x: r.rotation_x, y: r.rotation_y, z: r.rotation_z }
+    : undefined;
+  let widgetSpec: Record<string, unknown> = {};
+  try { widgetSpec = JSON.parse(r.widget_spec) as Record<string, unknown>; } catch { /* leave empty */ }
+  const widget: PanelWidget = { kind: r.widget_kind as PanelWidgetKind, spec: widgetSpec };
+  return {
+    id: r.id,
+    boardId: r.board_id,
+    title: r.title,
+    position: { x: r.position_x, y: r.position_y, z: r.position_z },
+    size: { w: r.size_w, h: r.size_h },
+    rotation,
+    widget,
+    anchor: r.anchor as AnchorMode,
+    pinned: r.pinned === 1,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    createdBy: r.created_by
   };
 }
 
@@ -414,6 +463,96 @@ export class Repo {
       'SELECT * FROM notifications ORDER BY created_at DESC LIMIT ?'
     ).all(limit) as NotificationRow[];
     return rows.map(rowToNotification);
+  }
+
+  // ---------- link types ----------
+
+  listLinkTypes(): LinkType[] {
+    const rows = this.db.prepare('SELECT * FROM link_types ORDER BY is_builtin DESC, label ASC').all() as LinkTypeRow[];
+    return rows.map(rowToLinkType);
+  }
+
+  getLinkType(id: string): LinkType | null {
+    const r = this.db.prepare('SELECT * FROM link_types WHERE id = ?').get(id) as LinkTypeRow | undefined;
+    return r ? rowToLinkType(r) : null;
+  }
+
+  upsertLinkType(t: LinkType): void {
+    this.db.prepare(`
+      INSERT INTO link_types (id, label, color, icon, is_directed, is_builtin, created_at)
+      VALUES (@id, @label, @color, @icon, @isDirected, @isBuiltin, @createdAt)
+      ON CONFLICT(id) DO UPDATE SET
+        label = excluded.label,
+        color = excluded.color,
+        icon = excluded.icon,
+        is_directed = excluded.is_directed
+    `).run({
+      id: t.id, label: t.label, color: t.color,
+      icon: t.icon ?? null,
+      isDirected: t.isDirected ? 1 : 0,
+      isBuiltin: t.isBuiltin ? 1 : 0,
+      createdAt: t.createdAt
+    });
+  }
+
+  /** Built-ins cannot be deleted. Returns true if deletion succeeded. */
+  deleteLinkType(id: string): boolean {
+    const r = this.getLinkType(id);
+    if (!r || r.isBuiltin) return false;
+    this.db.prepare('DELETE FROM link_types WHERE id = ?').run(id);
+    return true;
+  }
+
+  // ---------- panels ----------
+
+  upsertPanel(p: Panel, sessionId: string): void {
+    this.db.prepare(`
+      INSERT INTO panels
+        (id, session_id, board_id, title,
+         position_x, position_y, position_z,
+         rotation_x, rotation_y, rotation_z,
+         size_w, size_h, widget_kind, widget_spec,
+         anchor, pinned, created_at, updated_at, created_by)
+      VALUES
+        (@id, @sessionId, @boardId, @title,
+         @px, @py, @pz,
+         @rx, @ry, @rz,
+         @sw, @sh, @widgetKind, @widgetSpec,
+         @anchor, @pinned, @createdAt, @updatedAt, @createdBy)
+      ON CONFLICT(id) DO UPDATE SET
+        board_id = excluded.board_id,
+        title = excluded.title,
+        position_x = excluded.position_x, position_y = excluded.position_y, position_z = excluded.position_z,
+        rotation_x = excluded.rotation_x, rotation_y = excluded.rotation_y, rotation_z = excluded.rotation_z,
+        size_w = excluded.size_w, size_h = excluded.size_h,
+        widget_kind = excluded.widget_kind, widget_spec = excluded.widget_spec,
+        anchor = excluded.anchor, pinned = excluded.pinned,
+        updated_at = excluded.updated_at
+    `).run({
+      id: p.id, sessionId, boardId: p.boardId, title: p.title,
+      px: p.position.x, py: p.position.y, pz: p.position.z,
+      rx: p.rotation?.x ?? null, ry: p.rotation?.y ?? null, rz: p.rotation?.z ?? null,
+      sw: p.size.w, sh: p.size.h,
+      widgetKind: p.widget.kind,
+      widgetSpec: JSON.stringify(p.widget.spec ?? {}),
+      anchor: p.anchor,
+      pinned: p.pinned ? 1 : 0,
+      createdAt: p.createdAt, updatedAt: p.updatedAt, createdBy: p.createdBy
+    });
+  }
+
+  removePanel(id: string): void {
+    this.db.prepare('DELETE FROM panels WHERE id = ?').run(id);
+  }
+
+  getPanel(id: string): Panel | null {
+    const r = this.db.prepare('SELECT * FROM panels WHERE id = ?').get(id) as PanelRow | undefined;
+    return r ? rowToPanel(r) : null;
+  }
+
+  listPanelsByBoard(boardId: string): Panel[] {
+    const rows = this.db.prepare('SELECT * FROM panels WHERE board_id = ?').all(boardId) as PanelRow[];
+    return rows.map(rowToPanel);
   }
 
   // ---------- attachments ----------

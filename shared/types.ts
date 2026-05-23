@@ -1,11 +1,59 @@
-export type ArtifactKind = 'doc' | 'note' | 'code' | 'log' | 'image' | 'link' | 'cluster';
-export type EdgeKind = 'derives' | 'references' | 'contradicts' | 'groups-with';
+export type ArtifactKind = 'doc' | 'note' | 'code' | 'log' | 'image' | 'link' | 'cluster' | 'frame';
+
+/**
+ * Built-in link types. Kept as a union for code that switches on the four
+ * defaults (renderer color lookups, layout heuristics). At the data model
+ * level `Edge.kind` is `string` so user/agent-registered types live alongside
+ * built-ins without TypeScript gymnastics. Built-in ids are also seeded into
+ * the `link_types` table by migration v5 so the registry is the single source
+ * of truth at runtime.
+ */
+export type BuiltinEdgeKind = 'derives' | 'references' | 'contradicts' | 'groups-with';
+/** @deprecated Use `string` for new code; kept for backward-compat with existing call sites. */
+export type EdgeKind = BuiltinEdgeKind;
+export const BUILTIN_EDGE_KINDS: BuiltinEdgeKind[] = ['derives', 'references', 'contradicts', 'groups-with'];
+
+/**
+ * A registered link type. The id doubles as `Edge.kind`. Built-in types
+ * (`isBuiltin = true`) cannot be deleted but their color/label/icon can be
+ * tuned. Agents register new types via the `ontology-tools` MCP server.
+ */
+export interface LinkType {
+  /** stable id, used as `Edge.kind`. Lowercase, kebab-case. */
+  id: string;
+  /** human-readable label. */
+  label: string;
+  /** hex color (e.g. `#5EEAD4`) used by Edge renderer. */
+  color: string;
+  /** optional one-character glyph or emoji shown alongside the label. */
+  icon?: string;
+  /** whether the link has a meaningful src→dst direction. */
+  isDirected: boolean;
+  /** whether the type is one of the built-in four. */
+  isBuiltin: boolean;
+  createdAt: number;
+}
+
+export const BUILTIN_LINK_TYPES: LinkType[] = [
+  { id: 'derives',     label: 'Derives from', color: '#5EEAD4', isDirected: true,  isBuiltin: true, createdAt: 0 },
+  { id: 'references',  label: 'References',   color: '#8A8F98', isDirected: false, isBuiltin: true, createdAt: 0 },
+  { id: 'contradicts', label: 'Contradicts',  color: '#FBBF24', isDirected: false, isBuiltin: true, createdAt: 0 },
+  { id: 'groups-with', label: 'Groups with',  color: '#A78BFA', isDirected: false, isBuiltin: true, createdAt: 0 },
+];
+
 export type ActionKind = 'research' | 'write' | 'edit' | 'clarify' | 'reference';
 export type ActionStatus = 'queued' | 'running' | 'done' | 'cancelled' | 'error';
 export type AgentRole = 'listening' | 'worker' | 'layout' | 'naming';
 export type TranscriptSource = 'kbd' | 'voice';
 export type ArtifactState = 'streaming' | 'ready' | 'updating' | 'error' | 'awaiting-input';
 export type ListeningStatus = 'idle' | 'listening' | 'thinking' | 'muted';
+
+/**
+ * Anchor mode for spatial primitives. Currently only `'world'` is honored by
+ * the desktop renderer; the field is plumbed end-to-end so visionOS/XR ports
+ * (E3/M5) can introduce `'desk' | 'head' | 'hand'` without a migration.
+ */
+export type AnchorMode = 'world' | 'desk' | 'head' | 'hand';
 
 export interface Vec3 { x: number; y: number; z: number; }
 
@@ -89,7 +137,12 @@ export interface Edge {
   id: string;
   src: string;
   dst: string;
-  kind: EdgeKind;
+  /**
+   * Link type id. Built-ins: `'derives' | 'references' | 'contradicts' | 'groups-with'`.
+   * Custom types registered via `ontology-tools` extend the set; the renderer
+   * looks up color/label from the `linkTypes` registry in WorldSnapshot.
+   */
+  kind: string;
   weight: number;
   createdBy: 'layout' | 'worker' | 'user';
   /** Optional human label that overrides the kind name when rendering. */
@@ -142,12 +195,48 @@ export interface Session {
   agentSessionIds: { listening?: string; layout?: string };
 }
 
+/**
+ * Widget kinds that can be hosted on a Panel. `'empty'` is the default for
+ * freshly created panels — concrete widget rendering arrives in B19/B20/B22/B23.
+ */
+export type PanelWidgetKind = 'empty' | 'chart' | 'flow' | 'timeline' | 'graph-3d';
+
+export interface PanelWidget {
+  kind: PanelWidgetKind;
+  /** widget-specific spec; shape depends on `kind`. */
+  spec: Record<string, unknown>;
+}
+
+/**
+ * A 2D rectangular surface placed in 3D space, hosting an optional widget.
+ * Lives alongside artifacts but in its own table so widget-heavy boards
+ * don't bloat the artifact rendering pipeline.
+ */
+export interface Panel {
+  id: string;
+  boardId: string;
+  title: string;
+  position: Vec3;
+  /** width × height in world units. Default aspect ~3:2. */
+  size: { w: number; h: number };
+  /** Euler radians; reserved for future billboarding control. Default `{0,0,0}`. */
+  rotation?: Vec3;
+  widget: PanelWidget;
+  anchor: AnchorMode;
+  pinned?: boolean;
+  createdAt: number;
+  updatedAt: number;
+  createdBy: string;
+}
+
 export interface WorldSnapshot {
   session: Session;
   activeBoardId: string;
   boards: Board[];
   artifacts: Artifact[];
   edges: Edge[];
+  panels: Panel[];
+  linkTypes: LinkType[];
   actions: Action[];
   bookmarks: Bookmark[];
   notifications: Notification[];

@@ -14,6 +14,7 @@ interface BuildOpts {
 }
 
 const ARTIFACT_KINDS = ['doc', 'note', 'code', 'log'] as const;
+const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
 
 export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition, requestLayoutPass }: BuildOpts) {
   const producedIds: string[] = [];
@@ -149,6 +150,67 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
     }
   );
 
+  const createFrame = tool(
+    'create_frame',
+    'Create a user-intentional Frame — a labeled rectangular region grouping a set of artifacts. Differs from create_cluster: cluster is layout-agent-created semantic grouping, frame is user-created intentional group with explicit label and optional color. Frame auto-sizes around its members and follows them. Reference by id or shortName.',
+    {
+      label: z.string().describe('Frame label shown in the header bar.'),
+      artifactIds: z.array(z.string()).min(1).describe('IDs or shortNames of member artifacts (≥1).'),
+      color: z.string().optional().describe('Hex #RRGGBB frame accent color. Default cyan if omitted.')
+    },
+    async args => {
+      if (args.color !== undefined && !HEX_COLOR_RE.test(args.color)) {
+        return { content: [{ type: 'text' as const, text: `error: color "${args.color}" must be #RRGGBB hex.` }], isError: true };
+      }
+      const resolvedIds: string[] = [];
+      let cx = 0, cy = 0, cz = 0, n = 0;
+      const seen = new Set<string>();
+      for (const ref of args.artifactIds) {
+        const a = world.getArtifact(ref) ?? world.resolveShortName(ref);
+        if (!a || seen.has(a.id)) continue;
+        seen.add(a.id);
+        resolvedIds.push(a.id);
+        if (a.position) { cx += a.position.x; cy += a.position.y; cz += a.position.z; n++; }
+      }
+      if (resolvedIds.length < 1) {
+        return { content: [{ type: 'text' as const, text: 'error: no resolvable member artifacts' }], isError: true };
+      }
+      if (n > 0) { cx /= n; cy /= n; cz /= n; }
+      const id = nanoid(10);
+      const now = Date.now();
+      const baseName = args.label.split(/\s+/)[0]?.replace(/[^\w]/g, '') || 'Frame';
+      const shortName = world.uniqueShortName(baseName);
+      const frame: Artifact = {
+        id,
+        boardId: world.getActiveBoardId(),
+        kind: 'frame',
+        mime: 'application/x-frame',
+        title: args.label,
+        shortName,
+        body: args.label,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: actionId,
+        state: 'ready',
+        tags: ['frame'],
+        spec: {
+          summary: args.label,
+          tags: args.color ? [args.color] : [],
+          refs: resolvedIds,
+          tokens: Math.ceil(args.label.length / 4)
+        },
+        position: { x: cx, y: cy, z: cz }
+      };
+      await world.upsertArtifact(frame);
+      producedIds.push(id);
+      bus.emit('world', { type: 'artifact.upserted', artifact: frame });
+      bus.emit('agentLog', { agentRole: 'worker', agentId, actionId, kind: 'tool', ts: now, text: `created frame ${shortName} (${resolvedIds.length} members)` });
+      return {
+        content: [{ type: 'text' as const, text: `created frame ${id} "${args.label}" (${resolvedIds.length} members) at (${cx.toFixed(1)},${cy.toFixed(1)},${cz.toFixed(1)})` }]
+      };
+    }
+  );
+
   const requestLayoutPassTool = tool(
     'request_layout_pass',
     'Hand off to the Layout agent to reorganize the entire canvas. Use this for big-picture layout requests ("group everything by topic", "lay out chronologically"). Existing clusters are wiped before the new pass; the previous arrangement is saved to the layout-history stack so the user can restore it.',
@@ -165,7 +227,7 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
   const server = createSdkMcpServer({
     name: 'canvas-tools',
     version: '0.1.0',
-    tools: [createArtifact, updateArtifact, nameArtifact, setArtifactSpec, attachLog, requestLayoutPassTool]
+    tools: [createArtifact, updateArtifact, nameArtifact, setArtifactSpec, attachLog, createFrame, requestLayoutPassTool]
   });
 
   return { server, producedIds };
@@ -177,5 +239,6 @@ export const CANVAS_TOOL_NAMES = [
   'mcp__canvas-tools__name_artifact',
   'mcp__canvas-tools__set_artifact_spec',
   'mcp__canvas-tools__attach_log',
+  'mcp__canvas-tools__create_frame',
   'mcp__canvas-tools__request_layout_pass'
 ] as const;

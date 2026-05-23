@@ -4,6 +4,8 @@ import { Box3, Vector3 } from 'three';
 import { useWorldStore } from '../store/world-store';
 import { ArtifactObject } from './Artifact';
 import { EdgeObject } from './Edge';
+import { PanelObject } from './Panel';
+import { FrameObject } from './Frame';
 import { OrbitCameraController } from './camera/OrbitCameraController';
 import type { CameraController } from './camera/CameraController';
 import type { Artifact } from '@shared/types';
@@ -154,6 +156,7 @@ function matchesFilters(a: Artifact, filters: ReturnType<typeof useWorldStore.ge
 export function Canvas() {
   const artifacts = useWorldStore(s => s.artifacts);
   const edges = useWorldStore(s => s.edges);
+  const panels = useWorldStore(s => s.panels);
   const targets = useWorldStore(s => s.targetPositions);
   const selected = useWorldStore(s => s.selectedIds);
   const setSelected = useWorldStore(s => s.setSelected);
@@ -205,14 +208,32 @@ export function Canvas() {
       <directionalLight position={[-8, 4, -6]} intensity={0.25} color="#5EEAD4" />
       <gridHelper args={[60, 60, '#1F2228', '#15171C']} position={[0, -2, 0]} />
 
-      {[...artifacts.values()].map(a => (
-        <ArtifactObject
-          key={a.id}
-          artifact={a}
-          targetPosition={targets.get(a.id)}
-          selected={selected.has(a.id)}
-          dimmed={dimmed.has(a.id)}
-          onSelect={handleSelect}
+      {[...artifacts.values()].map(a => {
+        // Route frames to FrameObject (user-intentional grouping); everything
+        // else goes through ArtifactObject. Clusters continue to use the
+        // existing Artifact cluster branch — they are layout-agent created
+        // and visually distinct (no user color, different label glyph).
+        if (a.kind === 'frame') {
+          return <FrameObject key={a.id} artifact={a} dimmed={dimmed.has(a.id)} />;
+        }
+        return (
+          <ArtifactObject
+            key={a.id}
+            artifact={a}
+            targetPosition={targets.get(a.id)}
+            selected={selected.has(a.id)}
+            dimmed={dimmed.has(a.id)}
+            onSelect={handleSelect}
+          />
+        );
+      })}
+
+      {[...panels.values()].map(p => (
+        <PanelObject
+          key={p.id}
+          panel={p}
+          selected={false /* TODO selection model for panels in a follow-up */}
+          dimmed={false}
         />
       ))}
 

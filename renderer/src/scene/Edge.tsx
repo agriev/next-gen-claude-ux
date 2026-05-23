@@ -2,25 +2,29 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import { BufferGeometry, BufferAttribute, Vector3, Line, LineBasicMaterial, Group } from 'three';
-import type { Edge as EdgeData, Artifact, EdgeKind } from '@shared/types';
+import type { Edge as EdgeData, Artifact } from '@shared/types';
 import { getLivePos } from './live-transforms';
 import { useWorldStore } from '../store/world-store';
 
-const EDGE_COLOR: Record<EdgeData['kind'], string> = {
-  derives: '#5EEAD4',
-  references: '#8A8F98',
-  contradicts: '#FBBF24',
-  'groups-with': '#A78BFA'
-};
+/**
+ * Fallback used when a custom link_type references an id no longer in the
+ * registry (e.g. agent registered a type, user deleted it after the edge
+ * was created). Mid-grey so the edge is still discoverable but visually
+ * marked as orphaned.
+ */
+const FALLBACK_EDGE_COLOR = '#6B7280';
 
-const EDGE_KIND_LABEL: Record<EdgeData['kind'], string> = {
+/**
+ * Short label shown above an edge — defaults to the link_type label.
+ * Built-ins keep their existing short forms (refs / ⚡ contradicts / groups)
+ * for visual continuity with pre-registry boards.
+ */
+const BUILTIN_SHORT_LABEL: Record<string, string> = {
   derives: 'derives',
   references: 'refs',
   contradicts: '⚡ contradicts',
   'groups-with': 'groups'
 };
-
-const EDGE_KINDS: EdgeKind[] = ['derives', 'references', 'contradicts', 'groups-with'];
 
 interface Props {
   edge: EdgeData;
@@ -42,7 +46,11 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
 
   const selectedEdgeId = useWorldStore(s => s.selectedEdgeId);
   const setSelectedEdge = useWorldStore(s => s.setSelectedEdge);
+  const linkTypes = useWorldStore(s => s.linkTypes);
   const selected = selectedEdgeId === edge.id;
+
+  const linkType = linkTypes.find(t => t.id === edge.kind);
+  const accentColor = linkType?.color ?? FALLBACK_EDGE_COLOR;
 
   const positions = useMemo(() => new Float32Array(SAMPLES * 3), []);
   const geometry = useMemo(() => {
@@ -53,22 +61,22 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
   }, [positions]);
 
   const material = useMemo(() => new LineBasicMaterial({
-    color: EDGE_COLOR[edge.kind],
+    color: accentColor,
     transparent: true,
     opacity: dimmed ? 0.1 : (highlighted ? 1 : 0.45),
     depthWrite: false
-  }), [edge.kind]);
+  }), [accentColor]);
 
   useEffect(() => {
     if (selected) {
       material.color.set('#E8EAED'); // bright white when selected
       material.opacity = 1;
     } else {
-      material.color.set(EDGE_COLOR[edge.kind]);
+      material.color.set(accentColor);
       material.opacity = dimmed ? 0.1 : (highlighted ? 1 : 0.45);
     }
     material.needsUpdate = true;
-  }, [highlighted, dimmed, material, edge.kind, selected]);
+  }, [highlighted, dimmed, material, accentColor, selected]);
 
   useEffect(() => () => {
     geometry.dispose();
@@ -169,8 +177,8 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
     }
   });
 
-  const labelText = edge.label || EDGE_KIND_LABEL[edge.kind];
-  const accentColor = selected ? '#E8EAED' : EDGE_COLOR[edge.kind];
+  const labelText = edge.label || BUILTIN_SHORT_LABEL[edge.kind] || linkType?.label || edge.kind;
+  const labelColor = selected ? '#E8EAED' : accentColor;
   const showLabel = !dimmed;
 
   const handleLabelClick = (e: React.MouseEvent) => {
@@ -184,7 +192,7 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
     setSelectedEdge(null);
   };
 
-  const handleChangeKind = (kind: EdgeKind) => {
+  const handleChangeKind = (kind: string) => {
     void window.api.updateEdge(edge.id, { kind });
   };
 
@@ -205,9 +213,9 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
               style={{
                 padding: selected ? '2px 8px' : '1px 6px',
                 background: selected ? 'rgba(20,22,28,0.95)' : 'rgba(10,11,14,0.85)',
-                border: `1px solid ${selected ? accentColor : `${accentColor}55`}`,
+                border: `1px solid ${selected ? labelColor : `${labelColor}55`}`,
                 borderRadius: 999,
-                color: accentColor,
+                color: labelColor,
                 fontSize: selected ? 10 : 9,
                 fontFamily: 'JetBrains Mono, monospace',
                 fontWeight: highlighted || selected ? 600 : 400,
@@ -221,7 +229,7 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
                 ? 'click to deselect · press Backspace to delete'
                 : 'click to select edge'}
             >
-              {labelText}
+              {linkType?.icon ? `${linkType.icon} ` : ''}{labelText}
               {selected && (
                 <span
                   onClick={handleDelete}
@@ -258,24 +266,24 @@ export function EdgeObject({ edge, source, target, highlighted, dimmed = false }
                   pointerEvents: 'auto'
                 }}
               >
-                {EDGE_KINDS.map(k => (
+                {linkTypes.map(t => (
                   <button
-                    key={k}
-                    onClick={e => { e.stopPropagation(); handleChangeKind(k); }}
+                    key={t.id}
+                    onClick={e => { e.stopPropagation(); handleChangeKind(t.id); }}
                     style={{
-                      background: edge.kind === k ? `${EDGE_COLOR[k]}22` : 'transparent',
-                      border: `1px solid ${edge.kind === k ? EDGE_COLOR[k] : `${EDGE_COLOR[k]}55`}`,
-                      color: EDGE_COLOR[k],
+                      background: edge.kind === t.id ? `${t.color}22` : 'transparent',
+                      border: `1px solid ${edge.kind === t.id ? t.color : `${t.color}55`}`,
+                      color: t.color,
                       borderRadius: 4,
                       padding: '1px 6px',
                       fontSize: 9,
                       fontFamily: 'JetBrains Mono, monospace',
                       cursor: 'pointer',
-                      fontWeight: edge.kind === k ? 600 : 400
+                      fontWeight: edge.kind === t.id ? 600 : 400
                     }}
-                    title={`Set kind to ${k}`}
+                    title={`Set kind to ${t.label}${t.isBuiltin ? '' : ' (custom)'}`}
                   >
-                    {k}
+                    {t.icon ? `${t.icon} ` : ''}{t.id}
                   </button>
                 ))}
               </div>

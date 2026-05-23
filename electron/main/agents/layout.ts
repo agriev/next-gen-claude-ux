@@ -1,6 +1,8 @@
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { AsyncQueue } from '../async-queue';
 import { buildLayoutTools, LAYOUT_TOOL_NAMES } from '../mcp/layout-tools';
+import { buildOntologyTools, ONTOLOGY_TOOL_NAMES } from '../mcp/ontology-tools';
+import { buildVizTools, VIZ_TOOL_NAMES } from '../mcp/viz-tools';
 import { bus } from '../event-bus';
 import type { WorldState } from '../world-state';
 import type { Artifact } from '../../../shared/types';
@@ -89,18 +91,24 @@ export class LayoutAgent {
     console.log('[layout] starting');
 
     const server = buildLayoutTools(this.world);
+    const ontologyServer = buildOntologyTools(this.world);
+    const vizServer = buildVizTools(this.world);
 
     const initial = this.world.getAllArtifacts().map(a => this.minimal(a));
     this.pushDelta({ op: 'hello', artifacts: initial });
 
-    this.loopPromise = this.loop(server).finally(() => {
+    this.loopPromise = this.loop(server, ontologyServer, vizServer).finally(() => {
       this.running = false;
       this.loopPromise = null;
       console.log('[layout] loop ended');
     });
   }
 
-  private async loop(server: ReturnType<typeof buildLayoutTools>): Promise<void> {
+  private async loop(
+    server: ReturnType<typeof buildLayoutTools>,
+    ontologyServer: ReturnType<typeof buildOntologyTools>,
+    vizServer: ReturnType<typeof buildVizTools>
+  ): Promise<void> {
     try {
       console.log('[layout] opening query()');
       const q = query({
@@ -108,8 +116,12 @@ export class LayoutAgent {
         options: {
           model: this.world.getModel('layout'),
           systemPrompt: SYSTEM_PROMPT,
-          mcpServers: { 'layout-tools': server },
-          allowedTools: [...LAYOUT_TOOL_NAMES],
+          mcpServers: {
+            'layout-tools': server,
+            'ontology-tools': ontologyServer,
+            'viz-tools': vizServer
+          },
+          allowedTools: [...LAYOUT_TOOL_NAMES, ...ONTOLOGY_TOOL_NAMES, ...VIZ_TOOL_NAMES],
           tools: [],
           abortController: this.ctrl,
           maxTurns: 1000

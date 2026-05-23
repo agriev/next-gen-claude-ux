@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import type { WorldState } from '../world-state';
 import { buildCanvasTools, CANVAS_TOOL_NAMES } from '../mcp/canvas-tools';
 import { buildLayoutTools, LAYOUT_TOOL_NAMES } from '../mcp/layout-tools';
+import { buildOntologyTools, ONTOLOGY_TOOL_NAMES } from '../mcp/ontology-tools';
+import { buildVizTools, VIZ_TOOL_NAMES } from '../mcp/viz-tools';
 import { bus } from '../event-bus';
 import type { Action, ActionKind } from '../../../shared/types';
 
@@ -166,6 +168,8 @@ export function spawnWorker(opts: SpawnOpts): WorkerHandle {
     requestLayoutPass: opts.requestLayoutPass
   });
   const layoutToolsServer = buildLayoutTools(world);
+  const ontologyToolsServer = buildOntologyTools(world);
+  const vizToolsServer = buildVizTools(world);
 
   const promise = (async () => {
     const running: Action = { ...action, status: 'running' };
@@ -203,9 +207,16 @@ export function spawnWorker(opts: SpawnOpts): WorkerHandle {
           systemPrompt: WORKER_SYSTEM_PROMPT,
           mcpServers: {
             'canvas-tools': server,
-            'layout-tools': layoutToolsServer
+            'layout-tools': layoutToolsServer,
+            'ontology-tools': ontologyToolsServer,
+            'viz-tools': vizToolsServer
           },
-          allowedTools: [...CANVAS_TOOL_NAMES, ...LAYOUT_TOOL_NAMES],
+          allowedTools: [
+            ...CANVAS_TOOL_NAMES,
+            ...LAYOUT_TOOL_NAMES,
+            ...ONTOLOGY_TOOL_NAMES,
+            ...VIZ_TOOL_NAMES
+          ],
           tools: [],
           abortController: ctrl,
           maxTurns: 20
