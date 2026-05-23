@@ -90,6 +90,11 @@ interface WorldStore {
   // utterance preview (listening ghost)
   utterancePreview: { text: string; expiresAt: number } | null;
 
+  // B11 — marking menu (radial action menu)
+  markingMenu: { artifactId: string; screenX: number; screenY: number } | null;
+  openMarkingMenu: (artifactId: string, screenX: number, screenY: number) => void;
+  closeMarkingMenu: () => void;
+
   applySnapshot: (s: WorldSnapshot) => void;
   applyEvents: (events: WorldEvent[]) => void;
   appendAgentLog: (e: AgentLogEvent) => void;
@@ -151,6 +156,10 @@ export const useWorldStore = create<WorldStore>(set => ({
   modelSettings: { ...DEFAULT_MODELS },
   onboardingDismissed: false,
   utterancePreview: null,
+  markingMenu: null,
+
+  openMarkingMenu: (artifactId, screenX, screenY) => set({ markingMenu: { artifactId, screenX, screenY } }),
+  closeMarkingMenu: () => set({ markingMenu: null }),
 
   applySnapshot: s => {
     const artifacts = new Map<string, Artifact>();

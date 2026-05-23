@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Canvas as R3FCanvas, useThree, useFrame } from '@react-three/fiber';
 import { Box3, Vector3 } from 'three';
 import { useWorldStore } from '../store/world-store';
@@ -10,6 +10,8 @@ import { AgentAuras } from './AgentAura';
 import { IntentGhosts } from './IntentGhost';
 import { OrbitCameraController } from './camera/OrbitCameraController';
 import type { CameraController } from './camera/CameraController';
+import { computePivot } from './camera/pivotPolicy';
+import { computeRelatedIds } from '../store/related';
 import type { Artifact } from '@shared/types';
 
 function CameraFitter() {
@@ -97,6 +99,41 @@ function CameraFitter() {
     fitAll();
   }, [cameraMode]);
 
+  // B07 — pivot-to-selection. When the selection changes (and we're not in
+  // the middle of a multi-frame fit), smoothly tween `controls.target` to the
+  // pivot point. Uses computePivot() for the policy; null result = no change.
+  const pivotTweenRef = useRef<{ from: Vector3; to: Vector3; startedAt: number } | null>(null);
+  const selectionKey = useMemo(() => [...selectedIds].sort().join(','), [selectedIds]);
+  useEffect(() => {
+    if (!controls) return;
+    const pivot = computePivot({ selectedIds, positions: targets });
+    if (!pivot) return;
+    // Snapshot starting target so the tween reads correctly across mode switches.
+    pivotTweenRef.current = {
+      from: controls.target.clone(),
+      to: pivot.target.clone(),
+      startedAt: performance.now()
+    };
+  }, [selectionKey, controls]);
+
+  useFrame(() => {
+    const tween = pivotTweenRef.current;
+    if (!tween || !controls) return;
+    const elapsed = performance.now() - tween.startedAt;
+    const DURATION = 300;
+    if (elapsed >= DURATION) {
+      controls.target.copy(tween.to);
+      controls.update();
+      pivotTweenRef.current = null;
+      return;
+    }
+    // Ease-out cubic — feels snappy at the start, settles gently.
+    const t = elapsed / DURATION;
+    const eased = 1 - Math.pow(1 - t, 3);
+    controls.target.lerpVectors(tween.from, tween.to, eased);
+    controls.update();
+  });
+
   return null;
 }
 
@@ -167,16 +204,28 @@ export function Canvas() {
   const cameraMode = useWorldStore(s => s.cameraMode);
 
   const filtersActive = filters.kinds.size > 0 || filters.tags.size > 0 || filters.pinnedOnly || filters.query.length > 0;
+  // B03 — when a single artifact is focused, "related" set keeps full opacity;
+  // everything else dims to 18%. Selection counts as focus when exactly one
+  // artifact is selected (so click-to-select also triggers cross-filter).
+  const focusForRelated = focusedId ?? (selected.size === 1 ? [...selected][0] : null);
+  const relatedIds = useMemo(() => {
+    if (!focusForRelated) return null;
+    return computeRelatedIds({ focusedId: focusForRelated, artifacts, edges });
+  }, [focusForRelated, artifacts, edges]);
+
   const dimmed = useMemo(() => {
-    if (!filtersActive && !focusedId) return new Set<string>();
+    if (!filtersActive && !relatedIds) return new Set<string>();
     const dim = new Set<string>();
     for (const a of artifacts.values()) {
       const filterOk = !filtersActive || matchesFilters(a, filters);
-      const focusOk = !focusedId || a.id === focusedId;
+      // If relatedIds is computed, "focus ok" means the artifact is in the
+      // related set. Otherwise the old single-id focus behavior is preserved
+      // (focusedId stays in scope so re-renders still trigger).
+      const focusOk = !relatedIds || relatedIds.has(a.id);
       if (!filterOk || !focusOk) dim.add(a.id);
     }
     return dim;
-  }, [artifacts, filters, focusedId, filtersActive]);
+  }, [artifacts, filters, relatedIds, filtersActive]);
 
   const handleSelect = (id: string, additive: boolean) => {
     if (additive) {

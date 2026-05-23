@@ -21,6 +21,7 @@ import { LayoutMenu } from './ui/LayoutMenu';
 import { ModelPicker } from './ui/ModelPicker';
 import { AgentActivityHud } from './ui/AgentActivityHud';
 import { LayoutActivityPanel } from './ui/LayoutActivityPanel';
+import { MarkingMenu } from './ui/MarkingMenu';
 
 export function App() {
   useIpcBridge();
@@ -47,6 +48,7 @@ export function App() {
       <SearchModal />
       <DropPaste />
       <Onboarding />
+      <MarkingMenu />
       <Hotkeys />
     </div>
   );
