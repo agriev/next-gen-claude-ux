@@ -2,8 +2,22 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { nanoid } from 'nanoid';
 import type { WorldState } from '../world-state';
-import type { Edge, Artifact } from '../../../shared/types';
+import type { Edge, Artifact, PendingLayoutPlan, PlanPlacement, PlanCluster, PlanEdge } from '../../../shared/types';
 import { bus } from '../event-bus';
+
+/** B04 — time the user gets to react before a plan auto-commits. */
+const PLAN_TIMEOUT_MS = 5000;
+
+/** B09 — agent-aura flash lifetime in ms. Layout pulses are usually batched so a slightly longer window matches the visual rhythm. */
+const AURA_FLASH_MS = 1500;
+function layoutAura(id: string): void {
+  bus.emit('world', {
+    type: 'aura.flash',
+    artifactId: id,
+    agentRole: 'layout',
+    expiresAt: Date.now() + AURA_FLASH_MS
+  });
+}
 
 /**
  * The model sometimes passes shortNames (`"Atlas"`) where we asked for ids,
@@ -37,6 +51,7 @@ export function buildLayoutTools(world: WorldState) {
         type: 'layout.updated',
         positions: [{ id: args.id, x: args.x, y: args.y, z: args.z }]
       });
+      layoutAura(args.id);
       return { content: [{ type: 'text' as const, text: `placed ${args.id}` }] };
     }
   );
@@ -73,6 +88,8 @@ export function buildLayoutTools(world: WorldState) {
       };
       await world.upsertEdge(edge);
       bus.emit('world', { type: 'edge.upserted', edge });
+      layoutAura(srcA.id);
+      layoutAura(dstA.id);
       return { content: [{ type: 'text' as const, text: `edge ${args.src}→${args.dst} ${args.kind}` }] };
     }
   );
@@ -190,13 +207,15 @@ export function buildLayoutTools(world: WorldState) {
       }
       const memberCount = (cluster.spec?.refs ?? []).length;
       const p = cluster.position ?? { x: 0, y: 0, z: 0 };
+      layoutAura(cluster.id);
+      for (const memberId of cluster.spec?.refs ?? []) layoutAura(memberId);
       return { content: [{ type: 'text' as const, text: `cluster ${cluster.shortName} (${memberCount} members) at (${p.x.toFixed(1)},${p.y.toFixed(1)},${p.z.toFixed(1)})` }] };
     }
   );
 
   const applyLayoutPlan = tool(
     'apply_layout_plan',
-    'Apply an entire reorganize in ONE call. USE ONLY in response to reorganize deltas — this is the fast path. Atomic: places artifacts, optionally replaces edges, then creates clusters. For incremental upserts / hello / idle deltas, keep using place_on_canvas / draw_edge / create_cluster individually. Skipping pinned artifacts is automatic. Calling this with 30 placements is one Anthropic round-trip instead of 30.',
+    'BACKWARD-COMPATIBLE FAST PATH (≤4 placements). Apply an entire reorganize in ONE call without proposing. Atomic: places artifacts, optionally replaces edges, then creates clusters. For LARGE reorganize (≥5 placements) prefer propose_layout_plan + commit_layout_plan so the user sees an intent-ghost preview and can reject before commit (B04). For incremental upserts / hello / idle deltas, keep using place_on_canvas / draw_edge / create_cluster individually. Skipping pinned artifacts is automatic.',
     {
       placements: z.array(z.object({
         id: z.string(),
@@ -219,88 +238,239 @@ export function buildLayoutTools(world: WorldState) {
       replaceEdges: z.boolean().optional().describe('If true, delete all existing layout-created edges before adding the new ones. User-drawn edges are preserved.')
     },
     async args => {
-      // 1. Placements: skip pinned, batch-update positions. The model
-      // sometimes uses shortNames where we asked for ids — resolve both.
-      const placedPositions: Array<{ id: string; x: number; y: number; z: number }> = [];
-      let pinnedSkipped = 0;
+      const summary = await executePlan(world, {
+        placements: args.placements,
+        clusters: args.clusters,
+        edges: args.edges,
+        replaceEdges: args.replaceEdges
+      });
+      return { content: [{ type: 'text' as const, text: `layout plan applied: ${summary}` }] };
+    }
+  );
+
+  /**
+   * B04 — intent-ghost. Propose a layout plan to the user. The plan is NOT
+   * applied to artifact positions — instead, the renderer shows translucent
+   * "ghost" plates at the proposed positions. The user accepts (commit) or
+   * rejects, or the plan auto-commits after PLAN_TIMEOUT_MS.
+   *
+   * Returns the plan id immediately. Subsequent assistant turns SHOULD NOT
+   * make further mutations until they observe a commit or reject signal
+   * (currently surfaced via the next delta).
+   */
+  const proposeLayoutPlan = tool(
+    'propose_layout_plan',
+    `Propose a layout reorganize as an intent-ghost (B04). Use this for any reorganize with ≥5 placements — the user sees translucent ghost plates at the proposed positions and has ${PLAN_TIMEOUT_MS / 1000}s to accept or reject (default action: auto-commit). Returns the proposal id. Schema identical to apply_layout_plan plus a required \`label\` string explaining the reorganize.`,
+    {
+      label: z.string().describe('One-sentence summary of the reorganize (e.g. "regroup by-topic into 3 clusters").'),
+      placements: z.array(z.object({
+        id: z.string(),
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      })).min(1),
+      clusters: z.array(z.object({
+        label: z.string(),
+        artifactIds: z.array(z.string()).min(2),
+        description: z.string().optional(),
+        tagHint: z.string().optional()
+      })).optional(),
+      edges: z.array(z.object({
+        src: z.string(),
+        dst: z.string(),
+        kind: z.string(),
+        weight: z.number().optional()
+      })).optional(),
+      replaceEdges: z.boolean().optional()
+    },
+    async args => {
+      // Resolve placement ids up-front so the ghost preview uses real ids
+      // (renderer-side dedupe).
+      const resolvedPlacements: PlanPlacement[] = [];
       let missing = 0;
       for (const p of args.placements) {
         const a = resolveArtifact(world, p.id);
         if (!a) { missing++; continue; }
-        if (a.pinned) { pinnedSkipped++; continue; }
-        await world.setArtifactPosition(a.id, { x: p.x, y: p.y, z: p.z }, false);
-        placedPositions.push({ id: a.id, x: p.x, y: p.y, z: p.z });
+        resolvedPlacements.push({ id: a.id, x: p.x, y: p.y, z: p.z });
       }
-      if (placedPositions.length > 0) {
-        bus.emit('world', { type: 'layout.updated', positions: placedPositions });
+      if (resolvedPlacements.length === 0) {
+        return { content: [{ type: 'text' as const, text: 'error: no resolvable placements in plan' }], isError: true };
       }
 
-      // 2. Optionally replace existing layout-created edges (preserve user-drawn ones).
-      let edgesRemoved = 0;
-      if (args.replaceEdges) {
-        for (const e of world.getAllEdges()) {
-          if (e.createdBy === 'layout') {
-            await world.removeEdge(e.id);
-            bus.emit('world', { type: 'edge.removed', id: e.id });
-            edgesRemoved++;
-          }
+      const id = nanoid(10);
+      const now = Date.now();
+      const plan: PendingLayoutPlan = {
+        id,
+        label: args.label,
+        placements: resolvedPlacements,
+        clusters: args.clusters as PlanCluster[] | undefined,
+        edges: args.edges as PlanEdge[] | undefined,
+        replaceEdges: args.replaceEdges,
+        createdAt: now,
+        expiresAt: now + PLAN_TIMEOUT_MS
+      };
+      world.registerPendingPlan(plan);
+      bus.emit('world', { type: 'plan.proposed', plan });
+
+      // Auto-commit on timeout. If the plan is committed or rejected earlier
+      // this timer becomes a no-op (the plan is gone from the map).
+      setTimeout(() => {
+        if (world.hasPendingPlan(id)) {
+          void commitPlan(world, id).catch(err => {
+            console.warn('[layout-tools] auto-commit failed', err);
+          });
         }
+      }, PLAN_TIMEOUT_MS);
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: `proposed plan ${id} "${args.label}" — ${resolvedPlacements.length} placements${args.clusters?.length ? `, ${args.clusters.length} clusters` : ''}${args.edges?.length ? `, ${args.edges.length} edges` : ''}${missing ? ` · ${missing} ids missing` : ''} · auto-commits in ${PLAN_TIMEOUT_MS / 1000}s unless user rejects`
+        }]
+      };
+    }
+  );
+
+  const commitLayoutPlan = tool(
+    'commit_layout_plan',
+    'Commit a previously-proposed plan, applying its placements/clusters/edges. Idempotent: re-committing the same id is a no-op.',
+    { id: z.string() },
+    async args => {
+      const result = await commitPlan(world, args.id);
+      if (!result) {
+        return { content: [{ type: 'text' as const, text: `no such pending plan ${args.id}` }], isError: true };
       }
+      return { content: [{ type: 'text' as const, text: `committed plan ${args.id}: ${result}` }] };
+    }
+  );
 
-      // 3. Add new edges.
-      let edgesAdded = 0;
-      let edgesDroppedUnknownKind = 0;
-      if (args.edges) {
-        for (const e of args.edges) {
-          const srcA = resolveArtifact(world, e.src);
-          const dstA = resolveArtifact(world, e.dst);
-          if (!srcA || !dstA || srcA.id === dstA.id) continue;
-          if (!world.hasLinkType(e.kind)) { edgesDroppedUnknownKind++; continue; }
-          const edge: Edge = {
-            id: nanoid(10),
-            src: srcA.id,
-            dst: dstA.id,
-            kind: e.kind,
-            weight: e.weight ?? 1,
-            createdBy: 'layout'
-          };
-          await world.upsertEdge(edge);
-          bus.emit('world', { type: 'edge.upserted', edge });
-          edgesAdded++;
-        }
+  const rejectLayoutPlan = tool(
+    'reject_layout_plan',
+    'Reject a previously-proposed plan. The ghost preview disappears; nothing is moved.',
+    { id: z.string() },
+    async args => {
+      const plan = world.removePendingPlan(args.id);
+      if (!plan) {
+        return { content: [{ type: 'text' as const, text: `no such pending plan ${args.id}` }], isError: true };
       }
-
-      // 4. Clusters. makeCluster resolves member ids itself and skips
-      // groups with <2 valid members.
-      let clustersCreated = 0;
-      let clustersDropped = 0;
-      if (args.clusters) {
-        for (const c of args.clusters) {
-          const result = await makeCluster(world, c);
-          if (result) clustersCreated++; else clustersDropped++;
-        }
-      }
-
-      const summary = [
-        `placed ${placedPositions.length}`,
-        pinnedSkipped ? `skipped ${pinnedSkipped} pinned` : null,
-        missing ? `${missing} missing` : null,
-        clustersCreated ? `${clustersCreated} clusters` : null,
-        clustersDropped ? `${clustersDropped} clusters dropped (unresolved members)` : null,
-        edgesAdded ? `+${edgesAdded} edges` : null,
-        edgesRemoved ? `-${edgesRemoved} edges` : null,
-        edgesDroppedUnknownKind ? `${edgesDroppedUnknownKind} edges dropped (unknown link_type)` : null
-      ].filter(Boolean).join(' · ');
-
-      return { content: [{ type: 'text' as const, text: `layout plan applied: ${summary}` }] };
+      bus.emit('world', { type: 'plan.rejected', id: args.id, reason: 'user' });
+      return { content: [{ type: 'text' as const, text: `rejected plan ${args.id} "${plan.label}"` }] };
     }
   );
 
   return createSdkMcpServer({
     name: 'layout-tools',
     version: '0.1.0',
-    tools: [placeOnCanvas, drawEdge, removeEdge, listEdges, updateEdge, createCluster, applyLayoutPlan]
+    tools: [placeOnCanvas, drawEdge, removeEdge, listEdges, updateEdge, createCluster, applyLayoutPlan, proposeLayoutPlan, commitLayoutPlan, rejectLayoutPlan]
   });
+}
+
+/**
+ * Execute a layout plan (or its raw-args equivalent). Shared between
+ * `apply_layout_plan` (back-compat fast path) and `commit_layout_plan`.
+ * Returns the one-line summary string.
+ */
+async function executePlan(
+  world: WorldState,
+  plan: { placements: PlanPlacement[]; clusters?: PlanCluster[]; edges?: PlanEdge[]; replaceEdges?: boolean }
+): Promise<string> {
+  // 1. Placements.
+  const placedPositions: Array<{ id: string; x: number; y: number; z: number }> = [];
+  let pinnedSkipped = 0;
+  let missing = 0;
+  for (const p of plan.placements) {
+    const a = resolveArtifact(world, p.id);
+    if (!a) { missing++; continue; }
+    if (a.pinned) { pinnedSkipped++; continue; }
+    await world.setArtifactPosition(a.id, { x: p.x, y: p.y, z: p.z }, false);
+    placedPositions.push({ id: a.id, x: p.x, y: p.y, z: p.z });
+    bus.emit('world', { type: 'aura.flash', artifactId: a.id, agentRole: 'layout', expiresAt: Date.now() + 1500 });
+  }
+  if (placedPositions.length > 0) {
+    bus.emit('world', { type: 'layout.updated', positions: placedPositions });
+  }
+
+  // 2. Replace existing layout-created edges.
+  let edgesRemoved = 0;
+  if (plan.replaceEdges) {
+    for (const e of world.getAllEdges()) {
+      if (e.createdBy === 'layout') {
+        await world.removeEdge(e.id);
+        bus.emit('world', { type: 'edge.removed', id: e.id });
+        edgesRemoved++;
+      }
+    }
+  }
+
+  // 3. New edges.
+  let edgesAdded = 0;
+  let edgesDroppedUnknownKind = 0;
+  if (plan.edges) {
+    for (const e of plan.edges) {
+      const srcA = resolveArtifact(world, e.src);
+      const dstA = resolveArtifact(world, e.dst);
+      if (!srcA || !dstA || srcA.id === dstA.id) continue;
+      if (!world.hasLinkType(e.kind)) { edgesDroppedUnknownKind++; continue; }
+      const edge: Edge = {
+        id: nanoid(10),
+        src: srcA.id,
+        dst: dstA.id,
+        kind: e.kind,
+        weight: e.weight ?? 1,
+        createdBy: 'layout'
+      };
+      await world.upsertEdge(edge);
+      bus.emit('world', { type: 'edge.upserted', edge });
+      edgesAdded++;
+    }
+  }
+
+  // 4. Clusters.
+  let clustersCreated = 0;
+  let clustersDropped = 0;
+  if (plan.clusters) {
+    for (const c of plan.clusters) {
+      const result = await makeCluster(world, c);
+      if (result) clustersCreated++; else clustersDropped++;
+    }
+  }
+
+  return [
+    `placed ${placedPositions.length}`,
+    pinnedSkipped ? `skipped ${pinnedSkipped} pinned` : null,
+    missing ? `${missing} missing` : null,
+    clustersCreated ? `${clustersCreated} clusters` : null,
+    clustersDropped ? `${clustersDropped} clusters dropped (unresolved members)` : null,
+    edgesAdded ? `+${edgesAdded} edges` : null,
+    edgesRemoved ? `-${edgesRemoved} edges` : null,
+    edgesDroppedUnknownKind ? `${edgesDroppedUnknownKind} edges dropped (unknown link_type)` : null
+  ].filter(Boolean).join(' · ');
+}
+
+/**
+ * Commit a pending plan by id. Idempotent — removing the plan from the map
+ * is the de-dupe check. Used by both the user-driven commit_layout_plan tool
+ * and the timeout auto-commit.
+ */
+export async function commitPlan(world: WorldState, id: string): Promise<string | null> {
+  const plan = world.removePendingPlan(id);
+  if (!plan) return null;
+  const summary = await executePlan(world, {
+    placements: plan.placements,
+    clusters: plan.clusters,
+    edges: plan.edges,
+    replaceEdges: plan.replaceEdges
+  });
+  bus.emit('world', { type: 'plan.committed', id });
+  return summary;
+}
+
+/** Reject a pending plan by id (user action). Returns true if the plan existed. */
+export function rejectPlan(world: WorldState, id: string): boolean {
+  const plan = world.removePendingPlan(id);
+  if (!plan) return false;
+  bus.emit('world', { type: 'plan.rejected', id, reason: 'user' });
+  return true;
 }
 
 /**
@@ -393,5 +563,8 @@ export const LAYOUT_TOOL_NAMES = [
   'mcp__layout-tools__list_edges',
   'mcp__layout-tools__update_edge',
   'mcp__layout-tools__create_cluster',
-  'mcp__layout-tools__apply_layout_plan'
+  'mcp__layout-tools__apply_layout_plan',
+  'mcp__layout-tools__propose_layout_plan',
+  'mcp__layout-tools__commit_layout_plan',
+  'mcp__layout-tools__reject_layout_plan'
 ] as const;

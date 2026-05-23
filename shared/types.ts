@@ -196,6 +196,33 @@ export interface Session {
 }
 
 /**
+ * B04 — intent-ghost. A layout plan proposed by the Layout agent that has
+ * NOT yet been applied. The renderer draws translucent "ghost" plates at
+ * the proposed positions; the user accepts (commit) or rejects, or it
+ * auto-commits after `expiresAt`.
+ *
+ * Stored entirely in-memory by WorldState (no DB column — plans are
+ * ephemeral by design; a crash before commit is the same as rejection).
+ */
+export interface PlanPlacement { id: string; x: number; y: number; z: number; }
+export interface PlanCluster { label: string; artifactIds: string[]; description?: string; tagHint?: string; }
+export interface PlanEdge { src: string; dst: string; kind: string; weight?: number; }
+
+export interface PendingLayoutPlan {
+  id: string;
+  /** Human-readable reason from the agent (e.g. "regroup by-topic"). */
+  label: string;
+  placements: PlanPlacement[];
+  clusters?: PlanCluster[];
+  edges?: PlanEdge[];
+  /** Whether layout-created edges should be replaced before adding new ones. */
+  replaceEdges?: boolean;
+  createdAt: number;
+  /** Wall-clock ms; auto-commits at or after this timestamp. */
+  expiresAt: number;
+}
+
+/**
  * Widget kinds that can be hosted on a Panel. `'empty'` is the default for
  * freshly created panels — concrete widget rendering arrives in B19/B20/B22/B23.
  */
@@ -237,6 +264,7 @@ export interface WorldSnapshot {
   edges: Edge[];
   panels: Panel[];
   linkTypes: LinkType[];
+  pendingPlans: PendingLayoutPlan[];
   actions: Action[];
   bookmarks: Bookmark[];
   notifications: Notification[];

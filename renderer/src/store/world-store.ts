@@ -1,10 +1,22 @@
 import { create } from 'zustand';
 import type {
   Artifact, ArtifactKind, Edge, Action, Vec3, WorldSnapshot, ListeningStatus,
-  ActionLogEntry, Board, Bookmark, Notification, ModelSettings, LinkType, Panel
+  ActionLogEntry, Board, Bookmark, Notification, ModelSettings, LinkType, Panel, AgentRole,
+  PendingLayoutPlan
 } from '@shared/types';
 import { BUILTIN_LINK_TYPES, DEFAULT_MODELS } from '@shared/types';
 import type { WorldEvent, AgentLogEvent } from '@shared/events';
+
+/**
+ * B09 — agent-aura flash data. Keyed per artifactId per agentRole so a single
+ * artifact can simultaneously show worker+layout overlap (e.g. layout pulses
+ * positioning a worker-just-created card). Renderer reads the max expiresAt
+ * per role.
+ */
+export interface AuraFlash {
+  agentRole: AgentRole;
+  expiresAt: number;
+}
 
 export type CameraMode = 'orbit' | 'top-down';
 
@@ -19,6 +31,10 @@ interface WorldStore {
   artifacts: Map<string, Artifact>;
   edges: Map<string, Edge>;
   panels: Map<string, Panel>;
+  /** B09 — per-artifact aura flashes, mutable map updated on every aura.flash event. */
+  auraFlashes: Map<string, AuraFlash[]>;
+  /** B04 — pending layout plans (intent-ghosts). */
+  pendingPlans: Map<string, PendingLayoutPlan>;
   /**
    * Link-type registry, populated from WorldSnapshot. Falls back to the
    * built-ins so renderers never crash if a snapshot arrives without the
@@ -106,6 +122,8 @@ export const useWorldStore = create<WorldStore>(set => ({
   artifacts: new Map(),
   edges: new Map(),
   panels: new Map(),
+  auraFlashes: new Map(),
+  pendingPlans: new Map(),
   linkTypes: BUILTIN_LINK_TYPES,
   actions: new Map(),
   actionLogs: new Map(),
@@ -145,10 +163,13 @@ export const useWorldStore = create<WorldStore>(set => ({
     for (const b of s.bookmarks) bookmarks.set(b.slot, b);
     const panels = new Map<string, Panel>();
     for (const p of (s.panels ?? [])) panels.set(p.id, p);
+    const pendingPlans = new Map<string, PendingLayoutPlan>();
+    for (const p of (s.pendingPlans ?? [])) pendingPlans.set(p.id, p);
     set({
       artifacts,
       edges: new Map(s.edges.map(e => [e.id, e])),
       panels,
+      pendingPlans,
       linkTypes: (s.linkTypes && s.linkTypes.length > 0) ? s.linkTypes : BUILTIN_LINK_TYPES,
       actions: new Map(s.actions.map(a => [a.id, a])),
       targetPositions: targets,
@@ -167,6 +188,8 @@ export const useWorldStore = create<WorldStore>(set => ({
     const artifacts = new Map(state.artifacts);
     const edges = new Map(state.edges);
     const panels = new Map(state.panels);
+    const auraFlashes = new Map(state.auraFlashes);
+    const pendingPlans = new Map(state.pendingPlans);
     const actions = new Map(state.actions);
     const targets = new Map(state.targetPositions);
     const boards = new Map(state.boards);
@@ -227,6 +250,23 @@ export const useWorldStore = create<WorldStore>(set => ({
         case 'layout.updated':
           for (const p of e.positions) targets.set(p.id, { x: p.x, y: p.y, z: p.z });
           break;
+        case 'aura.flash': {
+          // Replace any same-agent entry; keep others. Drops expired roles so
+          // the map doesn't grow indefinitely.
+          const now = Date.now();
+          const prev = (auraFlashes.get(e.artifactId) ?? [])
+            .filter(f => f.expiresAt > now && f.agentRole !== e.agentRole);
+          prev.push({ agentRole: e.agentRole, expiresAt: e.expiresAt });
+          auraFlashes.set(e.artifactId, prev);
+          break;
+        }
+        case 'plan.proposed':
+          pendingPlans.set(e.plan.id, e.plan);
+          break;
+        case 'plan.committed':
+        case 'plan.rejected':
+          pendingPlans.delete(e.id);
+          break;
         case 'action.status':
           actions.set(e.action.id, e.action);
           break;
@@ -275,7 +315,7 @@ export const useWorldStore = create<WorldStore>(set => ({
       }
     }
     return {
-      artifacts, edges, panels, linkTypes, actions, targetPositions: targets,
+      artifacts, edges, panels, auraFlashes, pendingPlans, linkTypes, actions, targetPositions: targets,
       boards, bookmarks, notifications, undoCount, redoCount, layoutHistoryCount,
       modelSettings, listeningStatus, utterancePreview, activeBoardId,
       selectedEdgeId

@@ -1,6 +1,6 @@
 import type {
   Artifact, Edge, Action, TranscriptChunk, AgentRole, ListeningStatus,
-  Board, Bookmark, Notification, LinkType, Panel
+  Board, Bookmark, Notification, LinkType, Panel, PendingLayoutPlan
 } from './types';
 
 export type WorldEvent =
@@ -13,6 +13,17 @@ export type WorldEvent =
   | { type: 'link-type.upserted'; linkType: LinkType }
   | { type: 'link-type.removed'; id: string }
   | { type: 'layout.updated'; positions: Array<{ id: string; x: number; y: number; z: number }> }
+  /**
+   * Short-lived flash signalling agent activity on an artifact (B09 agent-aura).
+   * `expiresAt` is wall-clock ms; renderer fades the halo and prunes when expired.
+   * Multiple agents flashing the same artifact stack — renderer picks the
+   * latest-expiring per agent role for color blending.
+   */
+  | { type: 'aura.flash'; artifactId: string; agentRole: AgentRole; expiresAt: number }
+  /** B04 — intent-ghost lifecycle. */
+  | { type: 'plan.proposed'; plan: PendingLayoutPlan }
+  | { type: 'plan.committed'; id: string }
+  | { type: 'plan.rejected'; id: string; reason: 'user' | 'timeout' | 'superseded' }
   | { type: 'action.status'; action: Action }
   | { type: 'transcript.chunk'; chunk: TranscriptChunk }
   | { type: 'listening.status'; status: ListeningStatus }

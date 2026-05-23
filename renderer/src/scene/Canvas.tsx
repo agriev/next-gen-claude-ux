@@ -6,6 +6,8 @@ import { ArtifactObject } from './Artifact';
 import { EdgeObject } from './Edge';
 import { PanelObject } from './Panel';
 import { FrameObject } from './Frame';
+import { AgentAuras } from './AgentAura';
+import { IntentGhosts } from './IntentGhost';
 import { OrbitCameraController } from './camera/OrbitCameraController';
 import type { CameraController } from './camera/CameraController';
 import type { Artifact } from '@shared/types';
@@ -245,6 +247,9 @@ export function Canvas() {
         const dim = dimmed.has(e.src) || dimmed.has(e.dst);
         return <EdgeObject key={e.id} edge={e} source={src} target={dst} highlighted={highlighted} dimmed={dim} />;
       })}
+
+      <AgentAuras />
+      <IntentGhosts />
 
       <OrbitCameraController />
       <CameraFitter />

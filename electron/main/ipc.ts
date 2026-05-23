@@ -12,6 +12,7 @@ import type {
 } from '../../shared/ipc-channels';
 import type { WorldEvent, WorldDeltaBatch } from '../../shared/events';
 import type { Artifact, Edge, EdgeKind, Bookmark, Attachment, ArtifactKind } from '../../shared/types';
+import { commitPlan, rejectPlan } from './mcp/layout-tools';
 import Fuse from 'fuse.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -255,6 +256,17 @@ export function registerIpc(
     await world.upsertEdge(after);
     bus.emit('world', { type: 'edge.upserted', edge: after });
     orchestrator.undoLog.push({ kind: 'edge-update', before, after });
+  });
+
+  // ---------- pending layout plans (B04 intent-ghost) ----------
+
+  ipcMain.handle(IPC.cmd.commitLayoutPlan, async (_e, payload: { id: string }) => {
+    const summary = await commitPlan(world, payload.id);
+    return { ok: summary !== null, summary };
+  });
+
+  ipcMain.handle(IPC.cmd.rejectLayoutPlan, async (_e, payload: { id: string }) => {
+    return { ok: rejectPlan(world, payload.id) };
   });
 
   ipcMain.handle(IPC.cmd.deleteArtifact, async (_e, payload: DeleteArtifactPayload) => {

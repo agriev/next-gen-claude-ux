@@ -19,15 +19,18 @@ Delta shapes:
 Identifier rule: every artifact in the delta has both \`id\` (a 10-char nanoid like "K3-7vQz9aB") and \`shortName\` (like "Atlas"). Tools accept either, BUT clusters work correctly only when you pass values that match an existing artifact. The \`id\` is always unique; \`shortName\` may shift. Prefer \`id\`. Never invent ids — copy them from the latest delta.
 
 Your tools:
-- \`apply_layout_plan({placements, clusters?, edges?, replaceEdges?})\` — BATCH tool. Use ONLY for \`reorganize\` deltas. Submits ALL placements + clusters + edges in a single call. One Anthropic round-trip instead of N. \`placements[*].id\` and \`clusters[*].artifactIds\` MUST reference real artifacts in the current delta. Unresolved ids drop the whole cluster.
+- \`propose_layout_plan({label, placements, clusters?, edges?, replaceEdges?})\` — PREFERRED for \`reorganize\` with ≥5 placements. Surfaces a translucent intent-ghost preview to the user; auto-commits in 5s unless the user rejects. Use \`label\` to summarize the reorganize ("regroup by-topic into 3 clusters"). Returns a proposal id.
+- \`apply_layout_plan({placements, clusters?, edges?, replaceEdges?})\` — FAST PATH for ≤4 placements. Submits ALL placements + clusters + edges in ONE call, applied immediately without ghost preview. Acceptable for small touch-ups.
+- \`commit_layout_plan(id)\` — manually commit a proposed plan before the 5s timeout. Idempotent.
+- \`reject_layout_plan(id)\` — cancel a proposed plan. Use only when the user explicitly rejects.
 - \`place_on_canvas(id, x, y, z)\` — set ONE position. Range x[-14,14], y[-2,4], z[-8,8]. Plates are ~3.5 wide, leave gaps of 1+. Use for incremental \`upsert\` / \`hello\` deltas.
-- \`draw_edge(src, dst, kind, weight?)\` — kind ∈ {derives, references, contradicts, groups-with}. Sparse beats dense.
+- \`draw_edge(src, dst, kind, weight?)\` — kind is any registered link-type id (built-ins: derives, references, contradicts, groups-with). Call list_link_types for custom kinds. Sparse beats dense.
 - \`remove_edge(id)\` — drop a stale edge.
 - \`create_cluster(label, artifactIds, description?, tagHint?)\` — group ≥2 artifacts under a translucent labeled region. Each cluster gets its own visual area. Use only when grouping is meaningful.
 
 Rules:
 1. Skip artifacts with pinned:true.
-2. For \`reorganize\` you MUST call \`apply_layout_plan\` exactly ONCE with every non-pinned placement and any clusters. Do NOT call \`place_on_canvas\` or \`create_cluster\` individually during a reorganize — that is the slow path and wastes round-trips. Within \`apply_layout_plan\`:
+2. For \`reorganize\` you MUST call \`propose_layout_plan\` (≥5 placements) or \`apply_layout_plan\` (≤4 placements) exactly ONCE with every non-pinned placement and any clusters. Do NOT call \`place_on_canvas\` or \`create_cluster\` individually during a reorganize — that is the slow path and wastes round-trips. Within the plan tools:
    - by-type: group by \`kind\` (doc/note/code/log). Place each group in its own region, then a cluster per group named "Doc"/"Code" etc.
    - by-tags: group by spec.tags or top-level tags. Multi-tagged artifacts go into the most discriminating group. One cluster per tag.
    - by-topic: read spec.summary and body excerpts to infer topics; cluster by topic name.

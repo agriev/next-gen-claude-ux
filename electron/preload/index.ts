@@ -87,6 +87,12 @@ const api = {
   restoreLayout: (): Promise<{ ok: boolean; ageMs?: number }> =>
     ipcRenderer.invoke(IPC.cmd.restoreLayout),
 
+  // intent-ghost (B04)
+  commitLayoutPlan: (id: string): Promise<{ ok: boolean; summary: string | null }> =>
+    ipcRenderer.invoke(IPC.cmd.commitLayoutPlan, { id }),
+  rejectLayoutPlan: (id: string): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke(IPC.cmd.rejectLayoutPlan, { id }),
+
   // model settings
   setModel: (role: 'worker' | 'layout' | 'listening' | 'naming', model: string): Promise<{ ok: boolean }> =>
     ipcRenderer.invoke(IPC.cmd.setModel, { role, model }),

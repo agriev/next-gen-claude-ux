@@ -15,6 +15,17 @@ interface BuildOpts {
 
 const ARTIFACT_KINDS = ['doc', 'note', 'code', 'log'] as const;
 const HEX_COLOR_RE = /^#[0-9A-Fa-f]{6}$/;
+/** Aura flash lifetime — B09. Long enough to be perceptible, short enough that fast streams stack rather than smear. */
+const AURA_FLASH_MS = 1200;
+
+function flashAura(artifactId: string): void {
+  bus.emit('world', {
+    type: 'aura.flash',
+    artifactId,
+    agentRole: 'worker',
+    expiresAt: Date.now() + AURA_FLASH_MS
+  });
+}
 
 export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition, requestLayoutPass }: BuildOpts) {
   const producedIds: string[] = [];
@@ -52,6 +63,7 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
       await world.upsertArtifact(a);
       producedIds.push(id);
       bus.emit('world', { type: 'artifact.upserted', artifact: a });
+      flashAura(id);
       bus.emit('agentLog', { agentRole: 'worker', agentId, actionId, kind: 'tool', ts: now, text: `created ${shortName} (${args.kind})` });
       return {
         content: [{ type: 'text' as const, text: `created artifact id=${id} shortName=${shortName}` }]
@@ -84,6 +96,7 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
       };
       await world.upsertArtifact(updated);
       bus.emit('world', { type: 'artifact.upserted', artifact: updated });
+      flashAura(id);
       return { content: [{ type: 'text' as const, text: `updated ${id}` }] };
     }
   );
@@ -102,6 +115,7 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
       const updated: Artifact = { ...a, shortName: newName, updatedAt: Date.now() };
       await world.upsertArtifact(updated);
       bus.emit('world', { type: 'artifact.upserted', artifact: updated });
+      flashAura(args.id);
       return { content: [{ type: 'text' as const, text: `named ${args.id} as ${newName}` }] };
     }
   );
@@ -127,6 +141,7 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
       const updated: Artifact = { ...a, spec, updatedAt: Date.now() };
       await world.upsertArtifact(updated);
       bus.emit('world', { type: 'artifact.upserted', artifact: updated });
+      flashAura(args.id);
       return { content: [{ type: 'text' as const, text: `spec set on ${args.id}` }] };
     }
   );
@@ -204,6 +219,8 @@ export function buildCanvasTools({ world, actionId, agentId, getDefaultPosition,
       await world.upsertArtifact(frame);
       producedIds.push(id);
       bus.emit('world', { type: 'artifact.upserted', artifact: frame });
+      flashAura(id);
+      for (const memberId of resolvedIds) flashAura(memberId);
       bus.emit('agentLog', { agentRole: 'worker', agentId, actionId, kind: 'tool', ts: now, text: `created frame ${shortName} (${resolvedIds.length} members)` });
       return {
         content: [{ type: 'text' as const, text: `created frame ${id} "${args.label}" (${resolvedIds.length} members) at (${cx.toFixed(1)},${cy.toFixed(1)},${cz.toFixed(1)})` }]

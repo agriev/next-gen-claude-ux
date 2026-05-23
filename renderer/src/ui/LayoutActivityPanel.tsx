@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DraggablePanel } from './DraggablePanel';
+import { useWorldStore } from '../store/world-store';
 
 interface LayoutLog {
   ts: number;
@@ -125,6 +126,8 @@ export function LayoutActivityPanel() {
         >clear</button>
       </div>
 
+      <PendingPlansBar />
+
       <div
         ref={scrollRef}
         onScroll={onScroll}
@@ -169,6 +172,82 @@ export function LayoutActivityPanel() {
         <strong style={{ color: '#A78BFA' }}>why so slow?</strong> each placement is one Anthropic round-trip; 20 cards ≈ 20+ turns. context grows across the long-lived session. switch <em>Layout</em> model to a smaller/faster one in the ◐ model picker, or pin a few cards so it has less work.
       </div>
     </DraggablePanel>
+  );
+}
+
+/**
+ * B04 — pending layout plans (intent-ghost) accept/reject UI. Renders one
+ * row per pending plan with a countdown and Accept / Reject buttons. Empty
+ * state collapses to nothing.
+ */
+function PendingPlansBar() {
+  const pendingPlans = useWorldStore(s => s.pendingPlans);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (pendingPlans.size === 0) return;
+    const id = setInterval(() => setTick(t => t + 1), 200);
+    return () => clearInterval(id);
+  }, [pendingPlans.size]);
+  void tick;
+
+  if (pendingPlans.size === 0) return null;
+
+  return (
+    <div style={{
+      padding: '6px 10px',
+      borderBottom: '1px solid #1F2228',
+      background: 'rgba(94,234,212,0.06)',
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: 10,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 4
+    }}>
+      {[...pendingPlans.values()].map(plan => {
+        const remainingMs = Math.max(0, plan.expiresAt - Date.now());
+        const remainingSec = Math.ceil(remainingMs / 1000);
+        return (
+          <div key={plan.id} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}>
+            <span style={{ color: '#5EEAD4' }}>◇</span>
+            <span style={{ color: '#E8EAED', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {plan.label} · {plan.placements.length} cards · {remainingSec}s
+            </span>
+            <button
+              onClick={() => void window.api.commitLayoutPlan(plan.id)}
+              style={{
+                background: '#5EEAD422',
+                border: '1px solid #5EEAD4',
+                color: '#5EEAD4',
+                borderRadius: 3,
+                padding: '1px 6px',
+                fontSize: 9,
+                fontFamily: 'inherit',
+                cursor: 'pointer'
+              }}
+              title="Apply now"
+            >Accept</button>
+            <button
+              onClick={() => void window.api.rejectLayoutPlan(plan.id)}
+              style={{
+                background: 'transparent',
+                border: '1px solid #FB718555',
+                color: '#FB7185',
+                borderRadius: 3,
+                padding: '1px 6px',
+                fontSize: 9,
+                fontFamily: 'inherit',
+                cursor: 'pointer'
+              }}
+              title="Cancel — nothing will move"
+            >Reject</button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
