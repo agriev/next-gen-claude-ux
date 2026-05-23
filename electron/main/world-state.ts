@@ -7,7 +7,7 @@ import { runMigrations } from './db/migrations';
 import { Repo } from './db/repo';
 import type {
   Artifact, Edge, Action, Session, TranscriptChunk, WorldSnapshot, Vec3,
-  Board, Bookmark, Notification, ModelSettings, LinkType, Panel
+  Board, Bookmark, Notification, ModelSettings, LinkType, Panel, PendingLayoutPlan
 } from '../../shared/types';
 import { DEFAULT_MODELS } from '../../shared/types';
 
@@ -26,6 +26,8 @@ export class WorldState {
   private bookmarks = new Map<string, Bookmark>();
   private shortNameIndex = new Map<string, string>();
   private modelSettings: ModelSettings = { ...DEFAULT_MODELS };
+  /** B04 — pending layout plans awaiting commit / reject / timeout. */
+  private pendingPlans = new Map<string, PendingLayoutPlan>();
 
   private writeMutex: Promise<void> = Promise.resolve();
 
@@ -187,6 +189,7 @@ export class WorldState {
       edges: [...this.edges.values()],
       panels: [...this.panels.values()],
       linkTypes: [...this.linkTypes.values()],
+      pendingPlans: [...this.pendingPlans.values()],
       actions: [...this.actions.values()].sort((a, b) => b.startedAt - a.startedAt).slice(0, 200),
       bookmarks: [...this.bookmarks.values()],
       notifications: this.repo.listNotifications(50),
@@ -371,6 +374,19 @@ export class WorldState {
       if (ok) this.linkTypes.delete(id);
       return ok;
     });
+  }
+
+  // ---------- pending layout plans (B04 intent-ghost) ----------
+
+  /** Returns the live snapshot of plans for renderer / IPC consumers. */
+  listPendingPlans(): PendingLayoutPlan[] { return [...this.pendingPlans.values()]; }
+  getPendingPlan(id: string): PendingLayoutPlan | undefined { return this.pendingPlans.get(id); }
+  hasPendingPlan(id: string): boolean { return this.pendingPlans.has(id); }
+  registerPendingPlan(plan: PendingLayoutPlan): void { this.pendingPlans.set(plan.id, plan); }
+  removePendingPlan(id: string): PendingLayoutPlan | undefined {
+    const plan = this.pendingPlans.get(id);
+    this.pendingPlans.delete(id);
+    return plan;
   }
 
   // ---------- panels ----------

@@ -49,6 +49,10 @@ export const IPC = {
     requestReorganize: 'cmd:request-reorganize',
     restoreLayout: 'cmd:restore-layout',
 
+    // Pending layout plans (B04 intent-ghost)
+    commitLayoutPlan: 'cmd:commit-layout-plan',
+    rejectLayoutPlan: 'cmd:reject-layout-plan',
+
     // Models
     setModel: 'cmd:set-model'
   },
@@ -108,7 +112,8 @@ export interface PinArtifactPayload {
 export interface CreateEdgePayload {
   src: string;
   dst: string;
-  kind: 'derives' | 'references' | 'contradicts' | 'groups-with';
+  /** Link-type id from the ontology registry. */
+  kind: string;
   label?: string;
 }
 
@@ -118,7 +123,8 @@ export interface DeleteEdgePayload {
 
 export interface UpdateEdgePayload {
   id: string;
-  kind?: 'derives' | 'references' | 'contradicts' | 'groups-with';
+  /** Link-type id from the ontology registry. */
+  kind?: string;
   weight?: number;
   /** Pass null to clear, omit to leave unchanged. */
   label?: string | null;
