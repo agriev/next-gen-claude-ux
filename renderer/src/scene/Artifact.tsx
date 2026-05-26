@@ -211,7 +211,7 @@ export function ArtifactObject({ artifact, targetPosition, selected, dimmed = fa
             roughness={0.55}
             metalness={0.05}
             transparent={artifact.state === 'streaming' || dimmed}
-            opacity={dimmed ? 0.18 : (artifact.state === 'streaming' ? 0.85 : 1)}
+            opacity={dimmed ? 0.12 : (artifact.state === 'streaming' ? 0.85 : 1)}
           />
           <meshStandardMaterial attach="material-5" color="#0F1014" roughness={0.7} metalness={0.05} />
         </mesh>

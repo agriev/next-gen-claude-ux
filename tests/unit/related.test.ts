@@ -94,21 +94,35 @@ describe('computeRelatedIds', () => {
     expect(related.has('f')).toBe(true);
   });
 
-  it('includes artifacts sharing ≥1 tag', () => {
-    const a = mkArtifact('a', { tags: ['research', 'q4'] });
-    const b = mkArtifact('b', { tags: ['research'] });
-    const c = mkArtifact('c', { tags: ['marketing'] });
-    const d = mkArtifact('d', { tags: [], spec: { summary: '', tags: ['q4'], refs: [], tokens: 0 } });
-    const w = buildWorld([a, b, c, d], []);
+  it('requires ≥2 shared tags to relate purely on tags', () => {
+    // Single shared tag is too weak — broad tags like "core" co-occur across
+    // most artifacts and would defeat dimming. Two-tag overlap signals genuine
+    // kinship without needing a stop-word catalog.
+    const a = mkArtifact('a', { tags: ['research', 'q4', 'core'] });
+    const oneShared = mkArtifact('oneShared', { tags: ['research'] });
+    const twoShared = mkArtifact('twoShared', { tags: ['research', 'q4'] });
+    const viaSpec = mkArtifact('viaSpec', { tags: [], spec: { summary: '', tags: ['q4', 'core'], refs: [], tokens: 0 } });
+    const noShared = mkArtifact('noShared', { tags: ['marketing'] });
+    const w = buildWorld([a, oneShared, twoShared, viaSpec, noShared], []);
     const related = computeRelatedIds({ focusedId: 'a', ...w });
-    expect(related.has('b')).toBe(true);
-    expect(related.has('d')).toBe(true);
-    expect(related.has('c')).toBe(false);
+    expect(related.has('oneShared')).toBe(false); // 1 overlap — too weak
+    expect(related.has('twoShared')).toBe(true);  // 2 overlaps — kindred
+    expect(related.has('viaSpec')).toBe(true);    // 2 overlaps via spec.tags
+    expect(related.has('noShared')).toBe(false);
   });
 
-  it('combines all signals — edge + cluster + tag', () => {
-    const a = mkArtifact('a', { tags: ['q4'] });
-    const byTag = mkArtifact('byTag', { tags: ['q4'] });
+  it('skips tag-based relating when focused artifact has <2 tags total', () => {
+    // Threshold guards against degenerate "everyone with this lone tag" sets.
+    const a = mkArtifact('a', { tags: ['research'] });
+    const b = mkArtifact('b', { tags: ['research'] });
+    const w = buildWorld([a, b], []);
+    const related = computeRelatedIds({ focusedId: 'a', ...w });
+    expect(related.has('b')).toBe(false);
+  });
+
+  it('combines all signals — edge + cluster + tag (≥2 shared)', () => {
+    const a = mkArtifact('a', { tags: ['q4', 'launch'] });
+    const byTag = mkArtifact('byTag', { tags: ['q4', 'launch'] });
     const byEdge = mkArtifact('byEdge');
     const byCluster = mkArtifact('byCluster');
     const unrelated = mkArtifact('unrelated');

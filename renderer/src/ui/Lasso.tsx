@@ -1,7 +1,13 @@
 /**
- * Lasso — B27. Shift+drag on empty canvas surface to draw a selection
+ * Lasso — B27. Alt+drag on empty canvas surface to draw a selection
  * rectangle; on mouseup, every artifact whose world position projects
  * inside the rectangle is added to the selection.
+ *
+ * Modifier history: shipped V1 with shift+drag but that collides with
+ * OrbitControls' shift=pan keymap — both handlers fire, camera pans and
+ * the lasso silently fails. Alt is unused by drei OrbitControls, so it's
+ * a clean owner for the lasso gesture. Marking-menu uses ctrl+drag, so
+ * alt is the only free chord left.
  *
  * Lives at the UI layer (DOM overlay) rather than inside R3F: it needs
  * the camera's projection matrix from R3F, so we read it from a
@@ -36,13 +42,45 @@ export function Lasso() {
   const targets = useWorldStore(s => s.targetPositions);
   const setSelected = useWorldStore(s => s.setSelected);
 
+  const setLassoActive = useWorldStore(s => s.setLassoActive);
+
+  // OrbitControls listens for `pointerdown` on its own canvas element, which
+  // runs in parallel to (not after) our window `mousedown` handler. The cleanest
+  // way to keep them out of each other's way is to flip lassoActive on Alt
+  // keydown so OrbitControls re-renders with enableRotate=false BEFORE the
+  // user starts the drag. Released on keyup.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Alt') return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      setLassoActive(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== 'Alt') return;
+      // Only clear if we're not mid-drag. Otherwise the user lifted alt while
+      // still holding the mouse — keep lassoActive until mouseup.
+      if (!dragging.current) setLassoActive(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [setLassoActive]);
+
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (!e.shiftKey) return;
+      // Alt (Option on macOS) — see header comment for modifier rationale.
+      if (!e.altKey) return;
       if (e.button !== 0) return;
       // Skip if user clicked on UI element (input/button); rough check via tagName.
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON' || t.isContentEditable)) return;
+      // OrbitControls is already disabled by the keydown→lassoActive flip
+      // above, so we just need to start tracking the drag.
+      setLassoActive(true);
       dragging.current = { x0: e.clientX, y0: e.clientY };
       setRect({ x0: e.clientX, y0: e.clientY, x1: e.clientX, y1: e.clientY });
     };
@@ -54,6 +92,7 @@ export function Lasso() {
       if (!dragging.current || !rect) {
         dragging.current = null;
         setRect(null);
+        setLassoActive(false);
         return;
       }
       const cam = window.__jarvis_camera;
@@ -82,6 +121,7 @@ export function Lasso() {
       }
       dragging.current = null;
       setRect(null);
+      setLassoActive(false);
     };
     window.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
@@ -91,7 +131,7 @@ export function Lasso() {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [rect, artifacts, targets, setSelected]);
+  }, [rect, artifacts, targets, setSelected, setLassoActive]);
 
   if (!rect) return null;
   const left = Math.min(rect.x0, rect.x1);
@@ -119,7 +159,7 @@ export function Lasso() {
         background: 'rgba(20, 22, 27, 0.8)',
         padding: '2px 6px',
         borderRadius: 3
-      }}>Shift+drag lasso</span>
+      }}>Alt+drag lasso</span>
     </div>
   );
 }
