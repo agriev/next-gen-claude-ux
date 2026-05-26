@@ -47,19 +47,31 @@ export function computeRelatedIds(input: RelatedInput): Set<string> {
     for (const m of members) related.add(m);
   }
 
-  // 3. Shared tags. Build the focused-tag set once, then scan.
+  // 3. Shared tags — require ≥2 overlaps for the relation to count.
+  //
+  // V1 fired on a single shared tag, which silently broke dimming: on
+  // marketing-style boards a single broad tag like "core" or "strategy"
+  // co-occurs across most artifacts, dragging nearly the whole canvas
+  // into the related set and leaving nothing to dim. Two-tag overlap is
+  // a stricter signal of genuine kinship without needing a stop-word
+  // catalog. Hover any single-tag artifact and tags drop out entirely —
+  // edges + cluster membership carry the relation.
   const focusedTags = new Set<string>(focused.tags ?? []);
   for (const t of focused.spec?.tags ?? []) focusedTags.add(t);
-  if (focusedTags.size > 0) {
+  if (focusedTags.size >= 2) {
+    const MIN_SHARED = 2;
     for (const a of input.artifacts.values()) {
       if (related.has(a.id)) continue;
       const aTags = new Set<string>(a.tags ?? []);
       for (const t of a.spec?.tags ?? []) aTags.add(t);
-      let match = false;
+      let shared = 0;
       for (const t of aTags) {
-        if (focusedTags.has(t)) { match = true; break; }
+        if (focusedTags.has(t)) {
+          shared++;
+          if (shared >= MIN_SHARED) break;
+        }
       }
-      if (match) related.add(a.id);
+      if (shared >= MIN_SHARED) related.add(a.id);
     }
   }
 

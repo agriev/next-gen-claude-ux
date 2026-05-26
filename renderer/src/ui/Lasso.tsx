@@ -1,7 +1,13 @@
 /**
- * Lasso — B27. Shift+drag on empty canvas surface to draw a selection
+ * Lasso — B27. Alt+drag on empty canvas surface to draw a selection
  * rectangle; on mouseup, every artifact whose world position projects
  * inside the rectangle is added to the selection.
+ *
+ * Modifier history: shipped V1 with shift+drag but that collides with
+ * OrbitControls' shift=pan keymap — both handlers fire, camera pans and
+ * the lasso silently fails. Alt is unused by drei OrbitControls, so it's
+ * a clean owner for the lasso gesture. Marking-menu uses ctrl+drag, so
+ * alt is the only free chord left.
  *
  * Lives at the UI layer (DOM overlay) rather than inside R3F: it needs
  * the camera's projection matrix from R3F, so we read it from a
@@ -38,7 +44,8 @@ export function Lasso() {
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (!e.shiftKey) return;
+      // Alt (Option on macOS) — see header comment for modifier rationale.
+      if (!e.altKey) return;
       if (e.button !== 0) return;
       // Skip if user clicked on UI element (input/button); rough check via tagName.
       const t = e.target as HTMLElement | null;
@@ -119,7 +126,7 @@ export function Lasso() {
         background: 'rgba(20, 22, 27, 0.8)',
         padding: '2px 6px',
         borderRadius: 3
-      }}>Shift+drag lasso</span>
+      }}>Alt+drag lasso</span>
     </div>
   );
 }
