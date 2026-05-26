@@ -133,6 +133,11 @@ interface WorldStore {
   openMarkingMenu: (artifactId: string, screenX: number, screenY: number) => void;
   closeMarkingMenu: () => void;
 
+  // B27 — lasso drag in progress. OrbitCameraController reads this and
+  // suspends rotate/pan/zoom so the lasso doesn't fight the camera.
+  lassoActive: boolean;
+  setLassoActive: (active: boolean) => void;
+
   applySnapshot: (s: WorldSnapshot) => void;
   applyEvents: (events: WorldEvent[]) => void;
   appendAgentLog: (e: AgentLogEvent) => void;
@@ -215,6 +220,9 @@ export const useWorldStore = create<WorldStore>(set => ({
 
   openMarkingMenu: (artifactId, screenX, screenY) => set({ markingMenu: { artifactId, screenX, screenY } }),
   closeMarkingMenu: () => set({ markingMenu: null }),
+
+  lassoActive: false,
+  setLassoActive: active => set({ lassoActive: active }),
 
   applySnapshot: s => {
     const artifacts = new Map<string, Artifact>();
